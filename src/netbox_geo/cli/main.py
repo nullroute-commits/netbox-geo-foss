@@ -1,7 +1,6 @@
 """Command-line interface for netbox-geo."""
 
 import sys
-from typing import Any
 
 import click
 from loguru import logger
@@ -66,7 +65,7 @@ def import_data(source: str, batch_size: int | None, dry_run: bool) -> None:
     and OpenStreetMap into NetBox.
     """
     try:
-        settings = get_settings()
+        get_settings()  # Validate settings are available
 
         console.print(f"[bold blue]Importing data from {source}...[/bold blue]")
 
@@ -102,7 +101,7 @@ def sync(endpoint: str | None, force: bool) -> None:
     Update NetBox with the latest geographic data from cached sources.
     """
     try:
-        settings = get_settings()
+        get_settings()  # Validate settings are available
 
         target = endpoint if endpoint else "all endpoints"
         console.print(f"[bold blue]Synchronizing {target}...[/bold blue]")

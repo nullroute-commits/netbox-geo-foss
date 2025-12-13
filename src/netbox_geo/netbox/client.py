@@ -8,7 +8,7 @@ from loguru import logger
 from requests.exceptions import RequestException
 
 from netbox_geo.core.config import NetBoxConfig
-from netbox_geo.core.exceptions import NetBoxAPIError, RateLimitError
+from netbox_geo.core.exceptions import NetBoxAPIError
 from netbox_geo.netbox.rate_limiter import RateLimiter
 
 

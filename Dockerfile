@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for NetBox Geographic Data Integration
-# Python 3.13.1
-FROM python:3.13.1-slim as builder
+# Python 3.12
+FROM python:3.12-slim as builder
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -31,7 +31,7 @@ RUN python -m venv /app/.venv && \
     /app/.venv/bin/pip install -r requirements/base.txt
 
 # Stage 2: Runtime stage
-FROM python:3.13.1-slim as runtime
+FROM python:3.12-slim as runtime
 
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser
@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgeos-c1v5 \
     libproj25 \
     gdal-bin \
-    libgdal32 \
+    libgdal36 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory and cache directory
