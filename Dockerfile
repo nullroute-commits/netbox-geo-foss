@@ -1,34 +1,37 @@
-# Multi-stage Dockerfile for Python 3.13.0 application
-# Stage 1: Build stage
-FROM python:3.13-slim as builder
+# Multi-stage Dockerfile for NetBox Geographic Data Integration
+# Python 3.13.1
+FROM python:3.13.1-slim as builder
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_DEFAULT_TIMEOUT=100 \
-    POETRY_VERSION=1.8.3
+    PIP_DEFAULT_TIMEOUT=100
 
-# Install system dependencies
+# Install system dependencies for geographic libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     git \
+    libgeos-dev \
+    libproj-dev \
+    libgdal-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
 WORKDIR /app
 
 # Copy dependency files
-COPY pyproject.toml ./
+COPY requirements/base.txt requirements/base.txt
 
-# Install Python dependencies
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install .
+# Create virtual environment and install dependencies
+RUN python -m venv /app/.venv && \
+    /app/.venv/bin/pip install --upgrade pip setuptools wheel && \
+    /app/.venv/bin/pip install -r requirements/base.txt
 
 # Stage 2: Runtime stage
-FROM python:3.13-slim as runtime
+FROM python:3.13.1-slim as runtime
 
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser
@@ -42,31 +45,37 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    libgeos-c1v5 \
+    libproj25 \
+    gdal-bin \
+    libgdal32 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
+# Create app directory and cache directory
 WORKDIR /app
+RUN mkdir -p /app/cache && chown -R appuser:appuser /app
 
 # Copy Python dependencies from builder
-COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /app/.venv /app/.venv
 
 # Copy application code
-COPY --chown=appuser:appuser . .
+COPY --chown=appuser:appuser src /app/src
+COPY --chown=appuser:appuser pyproject.toml /app/
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/tmp && \
     chown -R appuser:appuser /app
 
-# Switch to non-root user
+# Install the package in editable mode
 USER appuser
+RUN /app/.venv/bin/pip install -e .
 
-# Health check
+# Health check (simple Python check)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD python -c "import netbox_geo; print(netbox_geo.__version__)" || exit 1
 
-# Expose port
+# Expose port (if running API server)
 EXPOSE 8000
 
-# Default command (can be overridden in docker-compose)
-CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default command
+CMD ["netbox-geo", "--help"]
