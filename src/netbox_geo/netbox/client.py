@@ -15,14 +15,15 @@ from netbox_geo.netbox.rate_limiter import RateLimiter
 class NetBoxClient:
     """NetBox API client with enhanced error handling and rate limiting."""
 
-    def __init__(self, config: NetBoxConfig) -> None:
+    def __init__(self, config: NetBoxConfig, rate_limit_calls_per_minute: int = 100) -> None:
         """Initialize NetBox client.
 
         Args:
             config: NetBox configuration.
+            rate_limit_calls_per_minute: Maximum API calls per minute.
         """
         self.config = config
-        self.rate_limiter = RateLimiter(calls_per_minute=100)
+        self.rate_limiter = RateLimiter(calls_per_minute=rate_limit_calls_per_minute)
         self._client = self._create_client()
 
     def _create_client(self) -> pynetbox.api:
