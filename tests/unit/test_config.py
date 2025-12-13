@@ -95,7 +95,7 @@ class TestSettings:
         monkeypatch.delenv("SECRET_KEY", raising=False)
         monkeypatch.delenv("DATABASE_URL", raising=False)
         monkeypatch.delenv("REDIS_URL", raising=False)
-        
+
         # Missing secret_key
         with pytest.raises(ValidationError) as exc_info:
             Settings(

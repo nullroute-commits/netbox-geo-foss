@@ -1,7 +1,7 @@
 """Application configuration using Pydantic Settings."""
 
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from pydantic import Field, PostgresDsn, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -36,13 +36,13 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
     # Database
-    database_url: str
+    database_url: Union[PostgresDsn, str]
     database_pool_size: int = Field(default=20)
     database_max_overflow: int = Field(default=0)
     database_echo: bool = Field(default=False)
 
     # Redis
-    redis_url: str
+    redis_url: Union[RedisDsn, str]
     redis_pool_size: int = Field(default=10)
 
     # Logging
