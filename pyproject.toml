@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "netbox-geo-foss"
 version = "1.0.0"
-description = "Enterprise FOSS Geographic Data Integration for NetBox 4.2.9+"
+description = "Enterprise FOSS Geographic Data Integration for NetBox 4.4.8+"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 license = {text = "MIT"}
@@ -26,7 +26,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "pynetbox==7.4.0",
+    "pynetbox==7.5.0",
     "requests==2.32.3",
     "pandas==2.2.3",
     "geopandas==1.0.1",

@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-Enterprise-grade integration of open-source geographic data (GeoNames, Natural Earth, OpenStreetMap) with NetBox 4.2.9+.
+Enterprise-grade integration of open-source geographic data (GeoNames, Natural Earth, OpenStreetMap) with NetBox 4.4.8+.
 
 ## 🌍 Overview
 
@@ -14,7 +14,7 @@ NetBox Geo FOSS provides a production-ready solution for importing and synchroni
 ### Key Features
 
 - **Multi-Source Integration**: GeoNames, Natural Earth, and OpenStreetMap
-- **NetBox 4.2.9+ Compatible**: Full API integration with pynetbox 7.4.0
+- **NetBox 4.4.8+ Compatible**: Full API integration with pynetbox 7.5.0
 - **Production-Ready**: Rate limiting, retry logic, bulk operations
 - **Type-Safe**: Full type hints and Pydantic v2 validation
 - **Enterprise Quality**: Comprehensive logging, monitoring hooks, error handling
@@ -25,7 +25,7 @@ NetBox Geo FOSS provides a production-ready solution for importing and synchroni
 ## 📋 Prerequisites
 
 - Python 3.13.1+
-- NetBox 4.2.9+
+- NetBox 4.4.8+
 - PostgreSQL 17+ (for local caching)
 - Docker & Docker Compose (optional)
 - GeoNames account (free registration)

@@ -14,7 +14,7 @@ class NetBoxConfig(BaseSettings):
     verify_ssl: bool = Field(True, description="Verify SSL certificates")
     timeout: int = Field(30, description="Request timeout in seconds", ge=1, le=300)
     max_retries: int = Field(3, description="Maximum number of retries", ge=0, le=10)
-    api_version: str = Field("3.7", description="NetBox API version")
+    api_version: str = Field("4.4", description="NetBox API version")
 
     model_config = SettingsConfigDict(
         env_prefix="NETBOX_",

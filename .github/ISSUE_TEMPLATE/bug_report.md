@@ -23,7 +23,7 @@ A clear and concise description of what you expected to happen.
 A clear and concise description of what actually happened.
 
 ## Environment
-- NetBox Version: [e.g., 4.2.9]
+- NetBox Version: [e.g., 4.4.8]
 - netbox-geo Version: [e.g., 1.0.0]
 - Python Version: [e.g., 3.13.1]
 - OS: [e.g., Ubuntu 24.04]

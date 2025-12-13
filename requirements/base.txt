@@ -1,5 +1,5 @@
 # NetBox Integration
-pynetbox==7.4.0
+pynetbox==7.5.0
 
 # HTTP & API Client
 requests==2.32.3

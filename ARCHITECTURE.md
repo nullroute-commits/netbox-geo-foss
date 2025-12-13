@@ -83,7 +83,7 @@ NetBox Geo FOSS implements a modular architecture for integrating geographic dat
 │                         NetBox Instance                              │
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐ │
-│  │                      NetBox API (4.2.9+)                       │ │
+│  │                      NetBox API (4.4.8+)                      │ │
 │  │  • Countries  • Regions  • Cities  • Locations                 │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────┘
@@ -118,7 +118,7 @@ NetBoxClient
 └── delete()              # DELETE object
 ```
 
-- **Technology**: pynetbox 7.4.0
+- **Technology**: pynetbox 7.5.0
 - **Features**: Rate limiting, retry logic, bulk operations
 - **Pattern**: Decorator pattern for rate limiting
 
@@ -948,7 +948,7 @@ This architecture documentation provides a comprehensive overview of the system 
 | Component | Technology | Version | Purpose |
 |-----------|-----------|---------|---------|
 | Language | Python | 3.13.1 | Application runtime |
-| NetBox Client | pynetbox | 7.4.0 | NetBox API integration |
+| NetBox Client | pynetbox | 7.5.0 | NetBox API integration |
 | Configuration | Pydantic | 2.10.3 | Settings & validation |
 | CLI Framework | Click | 8.1.8 | Command-line interface |
 | Terminal UI | Rich | 13.9.4 | Beautiful terminal output |

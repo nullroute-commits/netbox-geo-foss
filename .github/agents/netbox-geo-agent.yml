@@ -22,7 +22,7 @@ context:
 
 technologies:
   - Python 3.13.1
-  - pynetbox 7.4.0
+  - pynetbox 7.5.0
   - Pydantic 2.10.3
   - GeoPandas 1.0.1
   - Click 8.1.8
