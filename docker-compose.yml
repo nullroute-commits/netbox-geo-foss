@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: netbox-geo-app
+    volumes:
+      - ./src:/app/src
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    environment:
+      - APP_ENV=development
+      - APP_DEBUG=true
+      - NETBOX_URL=${NETBOX_URL:-https://demo.netbox.dev}
+      - NETBOX_TOKEN=${NETBOX_TOKEN:-your_token_here}
+      - NETBOX_VERIFY_SSL=${NETBOX_VERIFY_SSL:-false}
+      - GEONAMES_USERNAME=${GEONAMES_USERNAME:-demo}
+      - DATA_CACHE_DIR=/app/cache
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - netbox-geo-network
+    command: tail -f /dev/null  # Keep container running for development
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: netbox-geo-postgres
+    environment:
+      - POSTGRES_DB=netbox_geo
+      - POSTGRES_USER=netbox_geo
+      - POSTGRES_PASSWORD=netbox_geo_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - netbox-geo-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netbox_geo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: netbox-geo-redis
+    volumes:
+      - redis-data:/data
+    networks:
+      - netbox-geo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  netbox-geo-network:
+    driver: bridge

@@ -1,170 +1,89 @@
-# Enterprise CI/CD Pipeline Makefile
-.PHONY: help build test lint security deploy clean
+# NetBox Geographic Data Integration Makefile
+.PHONY: help setup test lint format security docker-build clean
 
 # Variables
-ENVIRONMENT ?= dev
-BUILD_ID ?= $(shell date +%Y%m%d%H%M%S)
-COMMIT_SHA ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "latest")
-DOCKER_COMPOSE = docker compose
-PIPELINE_COMPOSE = $(DOCKER_COMPOSE) -f docker-compose.pipeline.yml
+PYTHON := python3.13
+VENV := .venv
+BIN := $(VENV)/bin
+PYTHON_BIN := $(BIN)/python
+PIP := $(BIN)/pip
 
 # Help target
 help:
-	@echo "Enterprise CI/CD Pipeline"
+	@echo "NetBox Geographic Data Integration"
 	@echo ""
-	@echo "Usage: make [target] [ENVIRONMENT=dev|test|staging|prod]"
+	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
 	@echo "  help          Show this help message"
-	@echo "  setup         Set up CI/CD infrastructure"
-	@echo "  test          Run all tests"
-	@echo "  lint          Run code quality checks"
+	@echo "  setup         Create venv and install dependencies"
+	@echo "  test          Run test suite"
+	@echo "  lint          Run all linters"
+	@echo "  format        Auto-format code"
 	@echo "  security      Run security scans"
-	@echo "  build         Build Docker images"
-	@echo "  deploy        Deploy to environment"
-	@echo "  pipeline      Run full CI/CD pipeline"
-	@echo "  clean         Clean up resources"
-	@echo ""
-	@echo "CI/CD Infrastructure:"
-	@echo "  ci-up         Start CI/CD services"
-	@echo "  ci-down       Stop CI/CD services"
-	@echo "  ci-logs       Show CI/CD logs"
-	@echo ""
-	@echo "Environment-specific targets:"
-	@echo "  dev-up        Start development environment"
-	@echo "  test-up       Start test environment"
-	@echo "  prod-up       Start production environment"
+	@echo "  docker-build  Build Docker image"
+	@echo "  clean         Clean build artifacts"
+	@echo "  run           Run CLI help"
+	@echo "  dev           Start development environment"
 
-# Setup CI/CD infrastructure
+# Setup development environment
 setup:
-	@echo "Setting up CI/CD infrastructure..."
-	$(DOCKER_COMPOSE) -f docker-compose.ci.yml up -d
-	@echo "Waiting for services to be ready..."
-	@sleep 30
-	@echo "CI/CD infrastructure is ready!"
+	@echo "Setting up development environment..."
+	$(PYTHON) -m venv $(VENV)
+	$(PIP) install --upgrade pip setuptools wheel
+	$(PIP) install -r requirements/dev.txt
+	$(PIP) install -e .
+	@echo "Development environment ready!"
+	@echo "Activate with: source $(VENV)/bin/activate"
 
-# Run tests using pipeline executor
+# Run tests
 test:
-	@echo "Running tests in pipeline..."
-	$(PIPELINE_COMPOSE) run --rm \
-		-e ENVIRONMENT=$(ENVIRONMENT) \
-		-e BUILD_ID=$(BUILD_ID) \
-		-e COMMIT_SHA=$(COMMIT_SHA) \
-		-e PIPELINE_COMMAND=test \
-		pipeline-executor test
+	@echo "Running tests..."
+	$(BIN)/pytest --cov=netbox_geo --cov-report=html --cov-report=term-missing
 
-# Run linting
+# Run all linters
 lint:
-	@echo "Running code quality checks..."
-	$(PIPELINE_COMPOSE) run --rm \
-		-e ENVIRONMENT=$(ENVIRONMENT) \
-		-e BUILD_ID=$(BUILD_ID) \
-		-e COMMIT_SHA=$(COMMIT_SHA) \
-		-e PIPELINE_COMMAND=lint \
-		pipeline-executor lint
+	@echo "Running linters..."
+	$(BIN)/black --check src tests
+	$(BIN)/flake8 src tests
+	$(BIN)/isort --check-only src tests
+	$(BIN)/mypy src
+
+# Auto-format code
+format:
+	@echo "Formatting code..."
+	$(BIN)/black src tests
+	$(BIN)/isort src tests
 
 # Run security scans
 security:
 	@echo "Running security scans..."
-	$(PIPELINE_COMPOSE) run --rm \
-		-e ENVIRONMENT=$(ENVIRONMENT) \
-		-e BUILD_ID=$(BUILD_ID) \
-		-e COMMIT_SHA=$(COMMIT_SHA) \
-		-e PIPELINE_COMMAND=security \
-		pipeline-executor security
+	$(BIN)/bandit -r src -f json -o bandit-report.json || true
+	$(BIN)/safety check || true
 
-# Build Docker images
-build:
-	@echo "Building Docker images..."
-	$(PIPELINE_COMPOSE) run --rm \
-		-e ENVIRONMENT=$(ENVIRONMENT) \
-		-e BUILD_ID=$(BUILD_ID) \
-		-e COMMIT_SHA=$(COMMIT_SHA) \
-		-e PIPELINE_COMMAND=build \
-		pipeline-executor build
+# Build Docker image
+docker-build:
+	@echo "Building Docker image..."
+	docker build -t netbox-geo:latest .
 
-# Deploy to environment
-deploy:
-	@echo "Deploying to $(ENVIRONMENT) environment..."
-	$(PIPELINE_COMPOSE) run --rm \
-		-e ENVIRONMENT=$(ENVIRONMENT) \
-		-e BUILD_ID=$(BUILD_ID) \
-		-e COMMIT_SHA=$(COMMIT_SHA) \
-		-e PIPELINE_COMMAND=deploy \
-		pipeline-executor deploy
-
-# Run full pipeline
-pipeline: lint test build security
-	@echo "Full pipeline completed successfully!"
-
-# CI/CD infrastructure management
-ci-up:
-	$(DOCKER_COMPOSE) -f docker-compose.ci.yml up -d
-
-ci-down:
-	$(DOCKER_COMPOSE) -f docker-compose.ci.yml down
-
-ci-logs:
-	$(DOCKER_COMPOSE) -f docker-compose.ci.yml logs -f
-
-ci-restart:
-	$(DOCKER_COMPOSE) -f docker-compose.ci.yml restart
-
-# Environment-specific targets
-dev-up:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.dev.yml up -d
-
-dev-down:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.dev.yml down
-
-dev-logs:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.dev.yml logs -f
-
-test-up:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.test.yml up -d
-
-test-down:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.test.yml down
-
-prod-up:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.prod.yml up -d
-
-prod-down:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.prod.yml down
-
-# Clean up
+# Clean build artifacts
 clean:
 	@echo "Cleaning up..."
-	$(PIPELINE_COMPOSE) down -v
-	$(DOCKER_COMPOSE) -f docker-compose.ci.yml down -v
-	docker system prune -af --volumes
+	rm -rf $(VENV)
+	rm -rf build dist *.egg-info
+	rm -rf .pytest_cache .mypy_cache .coverage htmlcov
+	rm -rf bandit-report.json safety-report.json
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
-	rm -rf htmlcov coverage.xml .coverage
+	find . -type f -name "*.pyc" -delete
 
-# Docker compose shortcuts
-ps:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.$(ENVIRONMENT).yml ps
+# Run CLI
+run:
+	@echo "Running netbox-geo CLI..."
+	$(BIN)/netbox-geo --help
 
-logs:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.$(ENVIRONMENT).yml logs -f
-
-shell:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.$(ENVIRONMENT).yml exec app bash
-
-# Database management
-db-migrate:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.$(ENVIRONMENT).yml \
-		exec app alembic upgrade head
-
-db-rollback:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.$(ENVIRONMENT).yml \
-		exec app alembic downgrade -1
-
-db-reset:
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.$(ENVIRONMENT).yml \
-		exec app alembic downgrade base && \
-	$(DOCKER_COMPOSE) -f docker-compose.base.yml -f docker-compose.$(ENVIRONMENT).yml \
-		exec app alembic upgrade head
+# Start development environment
+dev:
+	@echo "Starting development environment..."
+	docker compose up -d
+	@echo "Development environment started!"
+	@echo "Access the app container with: docker compose exec app bash"

@@ -1,0 +1,39 @@
+# NetBox Geo Agent Configuration
+# This agent assists with NetBox geographic data integration development
+
+name: netbox-geo-agent
+description: Specialized agent for NetBox Geographic Data Integration development
+
+capabilities:
+  - Python 3.13.1 development
+  - NetBox API integration
+  - Geographic data processing (GeoNames, Natural Earth, OSM)
+  - Pydantic v2 configuration management
+  - Rate limiting and API optimization
+  - Geographic data validation
+
+context:
+  - Focus on enterprise-grade code quality
+  - Follow PEP 8 and type hints strictly
+  - Optimize for bulk operations (100k+ records)
+  - Implement proper error handling and logging
+  - Use Pydantic v2 for all configuration
+  - Apply rate limiting for all API calls
+
+technologies:
+  - Python 3.13.1
+  - pynetbox 7.4.0
+  - Pydantic 2.10.3
+  - GeoPandas 1.0.1
+  - Click 8.1.8
+  - Rich 13.9.4
+  - Loguru 0.7.3
+
+guidelines:
+  - Always include comprehensive docstrings (Google style)
+  - Add type hints to all functions and methods
+  - Implement retry logic with exponential backoff
+  - Use structured logging with context
+  - Validate all external data
+  - Handle rate limits gracefully
+  - Write tests for all new functionality
