@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from src.api.main import app
 from src.core.config import Settings, get_settings
 from src.core.database import Base, get_db
-from src.api.main import app
 
 
 # Override settings for testing
@@ -121,6 +121,7 @@ def reset_test_data():
     test_upload_dir = "/tmp/test_uploads"
     if os.path.exists(test_upload_dir):
         import shutil
+
         shutil.rmtree(test_upload_dir)
     os.makedirs(test_upload_dir, exist_ok=True)
 
@@ -129,6 +130,7 @@ def reset_test_data():
     # Cleanup after test
     if os.path.exists(test_upload_dir):
         import shutil
+
         shutil.rmtree(test_upload_dir)
 
 

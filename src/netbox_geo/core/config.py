@@ -34,9 +34,7 @@ class DataSourceConfig(BaseSettings):
     """Geographic data source configuration."""
 
     geonames_username: str = Field(..., description="GeoNames username")
-    geonames_api_url: str = Field(
-        "https://api.geonames.org", description="GeoNames API URL"
-    )
+    geonames_api_url: str = Field("https://api.geonames.org", description="GeoNames API URL")
     naturalearth_data_url: str = Field(
         "https://www.naturalearthdata.com/downloads/",
         description="Natural Earth data URL",
@@ -55,15 +53,9 @@ class DataManagementConfig(BaseSettings):
     """Data management configuration."""
 
     cache_dir: str = Field("./cache", description="Cache directory path")
-    update_interval_days: int = Field(
-        30, description="Data update interval in days", ge=1, le=365
-    )
-    batch_size: int = Field(
-        1000, description="Batch size for bulk operations", ge=1, le=10000
-    )
-    min_city_population: int = Field(
-        15000, description="Minimum city population to import", ge=0
-    )
+    update_interval_days: int = Field(30, description="Data update interval in days", ge=1, le=365)
+    batch_size: int = Field(1000, description="Batch size for bulk operations", ge=1, le=10000)
+    min_city_population: int = Field(15000, description="Minimum city population to import", ge=0)
 
     model_config = SettingsConfigDict(
         env_prefix="DATA_",
@@ -77,9 +69,7 @@ class PerformanceConfig(BaseSettings):
     rate_limit_calls_per_minute: int = Field(
         100, description="Maximum API calls per minute", ge=1, le=1000
     )
-    worker_threads: int = Field(
-        4, description="Number of worker threads", ge=1, le=32
-    )
+    worker_threads: int = Field(4, description="Number of worker threads", ge=1, le=32)
     async_enabled: bool = Field(True, description="Enable async operations")
 
     model_config = SettingsConfigDict(

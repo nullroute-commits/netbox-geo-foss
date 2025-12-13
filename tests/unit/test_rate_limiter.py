@@ -25,10 +25,10 @@ def test_rate_limiter_exceeds_limit() -> None:
     """Test rate limiter when limit is exceeded."""
     limiter = RateLimiter(calls_per_minute=60)
     limiter.tokens = 0  # Set tokens to 0 to force limit exceeded
-    
+
     with pytest.raises(RateLimitError) as exc_info:
         limiter.acquire(tokens=1, blocking=False)
-    
+
     assert exc_info.value.retry_after is not None
     assert exc_info.value.retry_after > 0
 
@@ -36,7 +36,7 @@ def test_rate_limiter_exceeds_limit() -> None:
 def test_rate_limiter_context_manager() -> None:
     """Test rate limiter as context manager."""
     limiter = RateLimiter(calls_per_minute=60)
-    
+
     with limiter:
         pass  # Context manager should work without errors
 
@@ -46,9 +46,9 @@ def test_rate_limiter_refill() -> None:
     limiter = RateLimiter(calls_per_minute=60)
     limiter.tokens = 0
     initial_tokens = limiter.tokens
-    
+
     # Wait a bit for refill
     time.sleep(0.1)
     limiter._refill()
-    
+
     assert limiter.tokens > initial_tokens

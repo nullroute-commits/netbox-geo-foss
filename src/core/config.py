@@ -33,19 +33,16 @@ class Settings(BaseSettings):
     secret_key: str = Field(..., env="SECRET_KEY")
     access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     refresh_token_expire_days: int = Field(default=7, env="REFRESH_TOKEN_EXPIRE_DAYS")
-    allowed_origins: list[str] = Field(
-        default=["http://localhost:3000"],
-        env="ALLOWED_ORIGINS"
-    )
+    allowed_origins: list[str] = Field(default=["http://localhost:3000"], env="ALLOWED_ORIGINS")
 
     # Database
-    database_url: PostgresDsn = Field(..., env="DATABASE_URL")
+    database_url: str = Field(..., env="DATABASE_URL")
     database_pool_size: int = Field(default=20, env="DATABASE_POOL_SIZE")
     database_max_overflow: int = Field(default=0, env="DATABASE_MAX_OVERFLOW")
     database_echo: bool = Field(default=False, env="DATABASE_ECHO")
 
     # Redis
-    redis_url: RedisDsn = Field(..., env="REDIS_URL")
+    redis_url: str = Field(..., env="REDIS_URL")
     redis_pool_size: int = Field(default=10, env="REDIS_POOL_SIZE")
 
     # Logging
