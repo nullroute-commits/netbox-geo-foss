@@ -1,0 +1,70 @@
+version: '3.8'
+
+# Development Docker Compose configuration
+# Last updated: 2025-08-30 22:40:55 UTC by nullroute-commits
+
+services:
+  web:
+    extends:
+      file: docker-compose.base.yml
+      service: web
+    build:
+      target: development
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.development
+      - DEBUG=True
+    env_file:
+      - environments/.env.development.example
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "8000:8000"
+    command: python manage.py runserver 0.0.0.0:8000
+
+  db:
+    extends:
+      file: docker-compose.base.yml
+      service: db
+    environment:
+      - POSTGRES_DB=django_app_dev
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+
+  memcached:
+    extends:
+      file: docker-compose.base.yml
+      service: memcached
+    ports:
+      - "11211:11211"
+
+  rabbitmq:
+    extends:
+      file: docker-compose.base.yml
+      service: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  # Development tools
+  adminer:
+    image: adminer:4.8.1
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
+    ports:
+      - "8080:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=db
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  # Mailhog for email testing
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    restart: unless-stopped

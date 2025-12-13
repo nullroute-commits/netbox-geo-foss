@@ -1,0 +1,394 @@
+# GitLab CI/CD Pipeline Configuration
+stages:
+  - build
+  - test
+  - security
+  - package
+  - deploy-docker
+  - deploy-lxc
+  - deploy-vm
+  - cleanup
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: tcp://docker:2375
+  PYTHON_VERSION: "3.13.0"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+# Cache configuration
+.cache:
+  cache:
+    key: "$CI_COMMIT_REF_SLUG-python"
+    paths:
+      - .cache/pip
+      - venv/
+
+# Docker-in-Docker service
+.docker:
+  services:
+    - docker:dind
+  before_script:
+    - docker info
+    - docker compose version
+
+# Python environment setup
+.python:
+  image: python:3.13-slim
+  extends: .cache
+  before_script:
+    - python -m venv venv
+    - source venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -e ".[dev,security]"
+
+# Build stage
+build:docker:
+  stage: build
+  extends: .docker
+  script:
+    - docker compose -f docker-compose.base.yml build
+    - docker compose -f docker-compose.dev.yml build
+    - docker compose -f docker-compose.test.yml build
+    - docker compose -f docker-compose.prod.yml build
+  artifacts:
+    reports:
+      dotenv: build.env
+    expire_in: 1 hour
+
+# Test stage
+test:unit:
+  stage: test
+  extends: .docker
+  parallel:
+    matrix:
+      - ENVIRONMENT: [dev, test]
+  script:
+    - |
+      docker compose -f docker-compose.base.yml \
+                    -f docker-compose.$ENVIRONMENT.yml \
+                    up -d postgres redis
+    - |
+      docker compose -f docker-compose.base.yml \
+                    -f docker-compose.$ENVIRONMENT.yml \
+                    run --rm app pytest \
+                    --cov=src \
+                    --cov-report=term \
+                    --cov-report=xml:coverage.xml \
+                    --junitxml=junit.xml
+  after_script:
+    - docker compose down -v
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.xml
+      - junit.xml
+    expire_in: 1 week
+
+test:integration:
+  stage: test
+  extends: .docker
+  needs: ["test:unit"]
+  script:
+    - docker compose -f docker-compose.base.yml -f docker-compose.test.yml up -d
+    - docker compose exec -T app pytest tests/integration -v
+  after_script:
+    - docker compose logs
+    - docker compose down -v
+
+test:e2e:
+  stage: test
+  extends: .docker
+  needs: ["test:integration"]
+  script:
+    - docker compose -f docker-compose.base.yml -f docker-compose.test.yml up -d
+    - docker compose exec -T app pytest tests/e2e -v --driver Remote --selenium http://selenium:4444
+  after_script:
+    - docker compose down -v
+
+# Security stage
+security:code:
+  stage: security
+  extends: .python
+  script:
+    - bandit -r src -f json -o bandit-report.json
+    - safety check --json > safety-report.json
+    - pip-audit --desc --format json > pip-audit-report.json
+  artifacts:
+    reports:
+      sast: bandit-report.json
+    paths:
+      - "*-report.json"
+    expire_in: 1 month
+
+security:container:
+  stage: security
+  extends: .docker
+  needs: ["build:docker"]
+  script:
+    - |
+      docker run --rm \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v $CI_PROJECT_DIR:/src \
+        aquasec/trivy:latest image \
+        --format json \
+        --output /src/trivy-report.json \
+        enterprise-app:latest
+  artifacts:
+    reports:
+      container_scanning: trivy-report.json
+    paths:
+      - trivy-report.json
+    expire_in: 1 month
+
+security:dependencies:
+  stage: security
+  extends: .python
+  script:
+    - pip list --format json > dependencies.json
+    - safety check --json > safety-report.json
+  artifacts:
+    reports:
+      dependency_scanning: safety-report.json
+    expire_in: 1 month
+
+# Package stage
+package:docker:
+  stage: package
+  extends: .docker
+  needs: ["security:container"]
+  only:
+    - main
+    - /^release\/.*$/
+    - tags
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      if [ "$CI_COMMIT_TAG" ]; then
+        TAG="$CI_COMMIT_TAG"
+      elif [ "$CI_COMMIT_BRANCH" == "main" ]; then
+        TAG="latest"
+      else
+        TAG="$CI_COMMIT_REF_SLUG"
+      fi
+    - docker build -t $CI_REGISTRY_IMAGE:$TAG .
+    - docker push $CI_REGISTRY_IMAGE:$TAG
+    - |
+      if [ "$CI_COMMIT_TAG" ]; then
+        docker tag $CI_REGISTRY_IMAGE:$TAG $CI_REGISTRY_IMAGE:latest
+        docker push $CI_REGISTRY_IMAGE:latest
+      fi
+
+# Deploy stage - Docker
+.deploy:
+  stage: deploy-docker
+  image: alpine/ansible:latest
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | ssh-add -
+    - mkdir -p ~/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+  script:
+    - |
+      ansible-playbook \
+        -i ansible/inventories/$ENVIRONMENT/hosts.yml \
+        ansible/playbooks/deploy.yml \
+        -e "app_version=$CI_COMMIT_SHA" \
+        -e "environment=$ENVIRONMENT" \
+        -e "registry_url=$CI_REGISTRY_IMAGE"
+
+deploy:dev:
+  extends: .deploy
+  environment:
+    name: development
+    url: https://dev.example.com
+  variables:
+    ENVIRONMENT: dev
+  only:
+    - develop
+  when: manual
+
+deploy:staging:
+  extends: .deploy
+  environment:
+    name: staging
+    url: https://staging.example.com
+  variables:
+    ENVIRONMENT: staging
+  only:
+    - main
+  needs: ["package:docker"]
+
+deploy:production:
+  extends: .deploy
+  environment:
+    name: production
+    url: https://example.com
+  variables:
+    ENVIRONMENT: prod
+  only:
+    - tags
+  when: manual
+  needs: ["package:docker", "deploy:staging"]
+
+# Build LXC template
+build:lxc-template:
+  stage: build
+  image: hashicorp/packer:latest
+  script:
+    - cd packer
+    - packer build lxc-template.json
+  only:
+    - main
+    - /^release\/.*$/
+  when: manual
+  artifacts:
+    paths:
+      - packer/manifest.json
+    expire_in: 1 month
+
+# Deploy stage - LXC
+.deploy-lxc:
+  stage: deploy-lxc
+  image: alpine/ansible:latest
+  before_script:
+    - apk add --no-cache openssh-client python3 py3-pip
+    - pip3 install proxmoxer requests
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | ssh-add -
+    - mkdir -p ~/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+  script:
+    - |
+      ansible-playbook \
+        -i ansible/inventories/$ENVIRONMENT/lxc-hosts.yml \
+        ansible/playbooks/deploy-lxc.yml \
+        -e "app_version=$CI_COMMIT_SHA" \
+        -e "environment=$ENVIRONMENT" \
+        -e "proxmox_api_token_secret=$PROXMOX_API_TOKEN"
+
+deploy-lxc:staging:
+  extends: .deploy-lxc
+  environment:
+    name: staging-lxc
+    url: https://lxc-staging.example.com
+  variables:
+    ENVIRONMENT: staging
+  only:
+    - main
+  when: manual
+  needs: ["package:docker"]
+
+deploy-lxc:production:
+  extends: .deploy-lxc
+  environment:
+    name: production-lxc
+    url: https://lxc.example.com
+  variables:
+    ENVIRONMENT: prod
+  only:
+    - tags
+  when: manual
+  needs: ["package:docker", "deploy:production"]
+
+# Deploy stage - QEMU VM
+.deploy-vm:
+  stage: deploy-vm
+  image: alpine/ansible:latest
+  before_script:
+    - apk add --no-cache openssh-client python3 py3-pip
+    - pip3 install proxmoxer requests
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | ssh-add -
+    - mkdir -p ~/.ssh
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+  script:
+    - |
+      ansible-playbook \
+        -i ansible/inventories/$ENVIRONMENT/vm-hosts.yml \
+        ansible/playbooks/deploy-vm.yml \
+        -e "app_version=$CI_COMMIT_SHA" \
+        -e "environment=$ENVIRONMENT" \
+        -e "docker_registry=$CI_REGISTRY" \
+        -e "proxmox_api_token_secret=$PROXMOX_API_TOKEN"
+
+deploy-vm:staging:
+  extends: .deploy-vm
+  environment:
+    name: staging-vm
+    url: https://vm-staging.example.com
+  variables:
+    ENVIRONMENT: staging
+  only:
+    - main
+  when: manual
+  needs: ["package:docker"]
+
+deploy-vm:production:
+  extends: .deploy-vm
+  environment:
+    name: production-vm
+    url: https://vm.example.com
+  variables:
+    ENVIRONMENT: prod
+  only:
+    - tags
+  when: manual
+  needs: ["package:docker", "deploy:production"]
+
+# Performance testing
+performance:load:
+  stage: deploy-vm
+  extends: .docker
+  needs: ["deploy:staging"]
+  only:
+    - main
+  script:
+    - |
+      docker run --rm \
+        -v $CI_PROJECT_DIR/tests/performance:/scripts \
+        grafana/k6:latest run \
+        --out json=/scripts/results.json \
+        /scripts/load-test.js
+  artifacts:
+    reports:
+      performance: tests/performance/results.json
+    expire_in: 1 month
+
+# Cleanup stage
+cleanup:docker:
+  stage: cleanup
+  extends: .docker
+  when: always
+  script:
+    - docker compose -f docker-compose.ci.yml down -v
+    - docker system prune -af --volumes
+    - docker volume prune -f
+  allow_failure: true
+
+# Scheduled pipeline for dependency updates
+update:dependencies:
+  only:
+    - schedules
+  extends: .python
+  script:
+    - pip list --outdated --format json > outdated.json
+    - |
+      if [ -s outdated.json ]; then
+        echo "Outdated dependencies found"
+        cat outdated.json
+      fi
+  artifacts:
+    paths:
+      - outdated.json
+    expire_in: 1 week

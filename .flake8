@@ -1,0 +1,46 @@
+[flake8]
+# Flake8 configuration
+# Last updated: 2025-08-30 22:40:55 UTC by nullroute-commits
+
+max-line-length = 120
+max-complexity = 10
+exclude = 
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    env,
+    .env,
+    migrations,
+    settings,
+    node_modules,
+    .pytest_cache,
+    .mypy_cache
+
+ignore = 
+    E203,
+    E501,
+    W503
+
+per-file-ignores =
+    __init__.py:F401
+    settings/*.py:F401,F403
+    */migrations/*.py:E501
+
+select = E,W,F,C
+
+statistics = True
+count = True
+show-source = True
+show-pep8 = True
+
+# Naming conventions
+classname-rgx = [A-Z_][a-zA-Z0-9_]+$
+function-rgx = [a-z_][a-z0-9_]{2,30}$
+method-rgx = [a-z_][a-z0-9_]{2,30}$
+const-rgx = (([A-Z_][A-Z0-9_]*)|(__.*__))$
+good-names = i,j,k,ex,Run,_,id,pk
+
+# Import order
+import-order-style = google
+application-import-names = app,config

@@ -1,0 +1,171 @@
+# CI/CD Runner Docker Compose configuration
+version: '3.9'
+
+services:
+  # GitLab Runner
+  gitlab-runner:
+    image: gitlab/gitlab-runner:v17.5.3
+    container_name: gitlab-runner
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./ci-cd/gitlab-ci/config:/etc/gitlab-runner
+      - gitlab-runner-data:/home/gitlab-runner
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - RUNNER_EXECUTOR=docker
+      - DOCKER_IMAGE=python:3.13-slim
+      - DOCKER_VOLUMES=/var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - ci-network
+
+  # GitHub Actions Runner (self-hosted)
+  github-runner:
+    build:
+      context: ./docker/github-runner
+      dockerfile: Dockerfile
+    container_name: github-runner
+    restart: unless-stopped
+    environment:
+      - RUNNER_NAME=enterprise-runner
+      - RUNNER_WORKDIR=/home/runner/work
+      - RUNNER_GROUP=Default
+      - LABELS=self-hosted,linux,x64,docker
+      - GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN}
+      - ORGANIZATION=${GITHUB_ORGANIZATION}
+      - REPO=${GITHUB_REPOSITORY}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - github-runner-data:/home/runner
+    networks:
+      - ci-network
+
+  # Jenkins Agent
+  jenkins-agent:
+    image: jenkins/inbound-agent:3273.v4cfe589b_fd83-1
+    container_name: jenkins-agent
+    restart: unless-stopped
+    environment:
+      - JENKINS_URL=${JENKINS_URL}
+      - JENKINS_SECRET=${JENKINS_SECRET}
+      - JENKINS_AGENT_NAME=docker-agent
+      - JENKINS_AGENT_WORKDIR=/home/jenkins/agent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - jenkins-agent-data:/home/jenkins/agent
+    networks:
+      - ci-network
+
+  # SonarQube for code quality
+  sonarqube:
+    image: sonarqube:25.9.0-community
+    container_name: sonarqube
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+    volumes:
+      - sonarqube-data:/opt/sonarqube/data
+      - sonarqube-extensions:/opt/sonarqube/extensions
+      - sonarqube-logs:/opt/sonarqube/logs
+    networks:
+      - ci-network
+
+  # Nexus Repository Manager
+  nexus:
+    image: sonatype/nexus3:latest
+    container_name: nexus
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+      - "8082:8082"  # Docker registry port
+    volumes:
+      - nexus-data:/nexus-data
+    environment:
+      - NEXUS_SECURITY_RANDOMPASSWORD=false
+    networks:
+      - ci-network
+
+  # Container Registry (Harbor)
+  harbor-registry:
+    image: goharbor/registry-photon:v2.11.1
+    container_name: harbor-registry
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry-data:/storage
+      - ./docker/harbor/config.yml:/etc/docker/registry/config.yml:ro
+    networks:
+      - ci-network
+
+  # Trivy for security scanning
+  trivy:
+    image: aquasec/trivy:latest
+    container_name: trivy-server
+    restart: unless-stopped
+    command: server --listen 0.0.0.0:8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - trivy-cache:/root/.cache/trivy
+    networks:
+      - ci-network
+
+  # MinIO for artifact storage
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9001:9001"  # Console
+      - "9002:9000"  # API
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-admin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-password123}
+    volumes:
+      - minio-data:/data
+    networks:
+      - ci-network
+
+  # Vault for secrets management
+  vault:
+    image: hashicorp/vault:latest
+    container_name: vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=${VAULT_TOKEN:-myroot}
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+    volumes:
+      - vault-data:/vault/data
+      - vault-logs:/vault/logs
+      - ./docker/vault/config:/vault/config
+    networks:
+      - ci-network
+
+volumes:
+  gitlab-runner-data:
+  github-runner-data:
+  jenkins-agent-data:
+  sonarqube-data:
+  sonarqube-extensions:
+  sonarqube-logs:
+  nexus-data:
+  registry-data:
+  trivy-cache:
+  minio-data:
+  vault-data:
+  vault-logs:
+
+networks:
+  ci-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

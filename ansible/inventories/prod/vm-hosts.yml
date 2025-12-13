@@ -1,0 +1,68 @@
+---
+# QEMU VM Hosts Inventory for Production Environment
+
+proxmox_cluster:
+  hosts:
+    pve1.example.com:
+      ansible_host: 192.168.1.10
+      proxmox_api_host: 192.168.1.10
+      proxmox_node: pve1
+    pve2.example.com:
+      ansible_host: 192.168.1.11
+      proxmox_api_host: 192.168.1.11
+      proxmox_node: pve2
+  vars:
+    ansible_user: root
+    ansible_python_interpreter: /usr/bin/python3
+    proxmox_api_port: 8006
+    proxmox_api_user: "root@pam"
+    proxmox_api_token_id: "ansible"
+    proxmox_api_token_secret: "{{ lookup('env', 'PROXMOX_API_TOKEN') }}"
+    proxmox_validate_certs: yes
+
+qemu_vms:
+  hosts:
+    # QEMU VMs will be dynamically added during deployment
+  vars:
+    ansible_user: admin
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+
+# Application-specific QEMU VM definitions
+app_qemu_vms:
+  hosts:
+    app-isolation-vm-01:
+      qemu_vmid: 200
+      qemu_name: app-isolation-01
+      qemu_memory: 8192
+      qemu_cores: 8
+      qemu_disk_size: "100G"
+      qemu_cloudinit: yes
+      qemu_ipconfig0: "ip=192.168.1.200/24,gw=192.168.1.1"
+    app-isolation-vm-02:
+      qemu_vmid: 201
+      qemu_name: app-isolation-02
+      qemu_memory: 8192
+      qemu_cores: 8
+      qemu_disk_size: "100G"
+      qemu_cloudinit: yes
+      qemu_ipconfig0: "ip=192.168.1.201/24,gw=192.168.1.1"
+    app-windows-vm:
+      qemu_vmid: 210
+      qemu_name: app-windows-01
+      qemu_memory: 16384
+      qemu_cores: 8
+      qemu_disk_size: "200G"
+      qemu_ostype: "win11"
+      qemu_cloudinit: no
+  vars:
+    qemu_ostype: "l26"
+    qemu_cpu_type: "host"
+    qemu_agent: yes
+    qemu_kvm: yes
+    qemu_onboot: yes
+    qemu_start: yes
+    qemu_ciuser: "admin"
+    qemu_sshkeys: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+    environment: production
+    deploy_path: "/opt/enterprise-app"

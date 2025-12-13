@@ -1,0 +1,9 @@
+-r base.txt
+black==24.3.0
+flake8==6.1.0
+mypy==1.5.1
+django-stubs==4.2.6
+sqlalchemy-stubs==0.4.0
+django-debug-toolbar==4.2.0
+pytest==7.4.3
+pytest-django==4.7.0

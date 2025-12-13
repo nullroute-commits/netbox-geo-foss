@@ -1,0 +1,45 @@
+---
+# VM configuration
+qemu_vmid: 200
+qemu_name: "app-vm"
+qemu_ostype: "l26"  # Linux 2.6+
+qemu_iso: ""
+qemu_cdrom: "none"
+
+# Resource allocation
+qemu_memory: 4096
+qemu_cores: 4
+qemu_sockets: 1
+qemu_cpu_type: "host"
+qemu_balloon: 2048
+
+# Storage configuration
+qemu_storage: "{{ proxmox_storage_local }}"
+qemu_disk_size: "32G"
+qemu_disk_format: "qcow2"
+qemu_cache: "none"
+qemu_ssd: yes
+
+# Network configuration
+qemu_net0_model: "virtio"
+qemu_net0_bridge: "{{ proxmox_network_bridge }}"
+qemu_net0_firewall: yes
+qemu_net0_tag: ""
+
+# Boot configuration
+qemu_boot: "order=scsi0"
+qemu_bios: "seabios"
+qemu_onboot: yes
+qemu_start: yes
+qemu_protection: no
+
+# Cloud-init settings (if applicable)
+qemu_cloudinit: no
+qemu_ciuser: "admin"
+qemu_cipassword: ""
+qemu_sshkeys: ""
+qemu_ipconfig0: "ip=dhcp"
+
+# VM features
+qemu_agent: yes
+qemu_kvm: yes

@@ -1,0 +1,68 @@
+# Test Docker Compose configuration
+version: '3.9'
+
+services:
+  app:
+    <<: *app-common
+    container_name: enterprise-app-test
+    environment:
+      - ENVIRONMENT=testing
+      - DEBUG=false
+    env_file:
+      - ./environments/test/.env
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./logs:/app/logs
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        pytest -v --cov=src --cov-report=xml --cov-report=html --cov-report=term
+      "
+
+  postgres:
+    container_name: enterprise-postgres-test
+    environment:
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_password
+      - POSTGRES_DB=enterprise_test
+    env_file:
+      - ./environments/test/.env.db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data-test:/var/lib/postgresql/data
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  redis:
+    container_name: enterprise-redis-test
+    environment:
+      - REDIS_PASSWORD=test_redis_password
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data-test:/data
+    tmpfs:
+      - /data
+
+  nginx:
+    container_name: enterprise-nginx-test
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/nginx/test.conf:/etc/nginx/conf.d/default.conf:ro
+
+  # Test-specific services
+  selenium:
+    image: selenium/standalone-chrome:131.0
+    container_name: enterprise-selenium-test
+    ports:
+      - "4444:4444"
+    networks:
+      - app-network
+    shm_size: 2gb
+
+volumes:
+  postgres-data-test:
+  redis-data-test:

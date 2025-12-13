@@ -1,0 +1,67 @@
+---
+- name: Deploy Application to Hybrid Environment
+  hosts: proxmox_cluster
+  gather_facts: yes
+  vars:
+    app_name: enterprise-app
+    deploy_user: "{{ ansible_user | default('deploy') }}"
+    
+  pre_tasks:
+    - name: Validate deployment environment
+      assert:
+        that:
+          - environment is defined
+          - app_version is defined
+          - deployment_targets is defined
+        fail_msg: "Required variables not defined"
+    
+    - name: Display deployment information
+      debug:
+        msg: |
+          Deploying {{ app_name }} version {{ app_version }}
+          Environment: {{ environment }}
+          Targets: {{ deployment_targets | join(', ') }}
+
+  roles:
+    - role: proxmox-common
+      tags: proxmox
+
+  tasks:
+    - name: Deploy to Docker hosts
+      include_role:
+        name: docker-host
+      when: "'docker' in deployment_targets"
+      tags: docker
+
+    - name: Deploy to LXC containers
+      include_role:
+        name: lxc-container
+      when: "'lxc' in deployment_targets"
+      tags: lxc
+
+    - name: Deploy to QEMU VMs
+      include_role:
+        name: qemu-vm
+      when: "'vm' in deployment_targets"
+      tags: vm
+
+  post_tasks:
+    - name: Verify all deployments
+      uri:
+        url: "http://{{ item }}:8000/health"
+        status_code: 200
+      loop: "{{ groups.get('lxc_containers', []) + groups.get('qemu_vms', []) + groups.get('docker_hosts', []) }}"
+      when: item in ansible_play_hosts_all
+      register: health_checks
+      tags: verify
+
+    - name: Display deployment summary
+      debug:
+        msg: |
+          Hybrid deployment completed successfully!
+          Application: {{ app_name }}
+          Version: {{ app_version }}
+          Environment: {{ environment }}
+          Deployed to: {{ deployment_targets | join(', ') }}
+          Total hosts: {{ groups['all'] | length }}
+          Health checks: All passed

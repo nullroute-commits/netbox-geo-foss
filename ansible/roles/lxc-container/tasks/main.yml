@@ -1,0 +1,97 @@
+---
+- name: Validate authentication methods
+  assert:
+    that:
+      - lxc_password is defined or lxc_ssh_public_keys is defined
+    fail_msg: "Either lxc_password or lxc_ssh_public_keys must be provided for container access"
+  tags:
+    - lxc
+    - validate
+
+- name: Create LXC container
+  community.general.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ lxc_vmid }}"
+    hostname: "{{ lxc_hostname }}"
+    ostemplate: "{{ lxc_ostemplate }}"
+    password: "{{ lxc_password | default(omit) }}"
+    pubkey: "{{ lxc_ssh_public_keys | default(omit) }}"
+    memory: "{{ lxc_memory }}"
+    swap: "{{ lxc_swap }}"
+    cores: "{{ lxc_cores }}"
+    disk: "{{ lxc_storage }}:{{ lxc_disk_size }}"
+    netif:
+      net0: "name={{ lxc_net0_name }},bridge={{ lxc_net0_bridge }},ip={{ lxc_net0_ip }}{{ ',gw=' + lxc_net0_gw if lxc_net0_gw else '' }}{{ ',tag=' + lxc_net0_tag if lxc_net0_tag else '' }}"
+    unprivileged: "{{ lxc_unprivileged }}"
+    onboot: "{{ lxc_onboot }}"
+    protection: "{{ lxc_protection }}"
+    state: present
+  register: lxc_create_result
+  tags:
+    - lxc
+    - create
+
+- name: Start LXC container
+  community.general.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ lxc_vmid }}"
+    state: started
+  when: lxc_start | bool
+  tags:
+    - lxc
+    - start
+
+- name: Get container IP address
+  shell: |
+    pct exec {{ lxc_vmid }} -- ip -4 addr show dev eth0 | grep inet | awk '{print $2}' | cut -d/ -f1
+  register: lxc_ip_result
+  delegate_to: "{{ proxmox_api_host }}"
+  until: lxc_ip_result.stdout | length > 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  when: lxc_net0_ip == "dhcp"
+  tags:
+    - lxc
+    - network
+
+- name: Set container IP fact
+  set_fact:
+    lxc_container_ip: "{{ lxc_ip_result.stdout if lxc_net0_ip == 'dhcp' else lxc_net0_ip.split('/')[0] }}"
+  tags:
+    - lxc
+    - network
+
+- name: Wait for container to be ready
+  wait_for:
+    host: "{{ lxc_container_ip }}"
+    port: 22
+    delay: 10
+    timeout: 300
+    state: started
+  tags:
+    - lxc
+    - verify
+
+- name: Display container information
+  debug:
+    msg:
+      - "LXC Container created successfully"
+      - "VMID: {{ lxc_vmid }}"
+      - "Hostname: {{ lxc_hostname }}"
+      - "IP Address: {{ lxc_container_ip }}"
+      - "Memory: {{ lxc_memory }}MB"
+      - "Cores: {{ lxc_cores }}"
+  tags:
+    - lxc
+    - info

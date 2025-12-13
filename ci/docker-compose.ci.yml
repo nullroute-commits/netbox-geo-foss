@@ -1,0 +1,93 @@
+version: '3.8'
+
+# CI/CD Docker Compose configuration
+# Last updated: 2025-08-30 22:40:55 UTC by nullroute-commits
+
+services:
+  ci-runner:
+    build:
+      context: .
+      dockerfile: ci/Dockerfile.ci
+      args:
+        - PYTHON_VERSION=3.13.0
+        - BUILDPLATFORM=${DOCKER_PLATFORM:-linux/amd64}
+        - TARGETPLATFORM=${DOCKER_PLATFORM:-linux/amd64}
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock  # For Docker-in-Docker
+      - ci_cache:/app/.cache
+    environment:
+      - CI=true
+      - DJANGO_SETTINGS_MODULE=config.settings.testing
+    working_dir: /app
+    command: /app/ci/entrypoint.sh
+
+  test-db:
+    image: postgres:17.2
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
+    environment:
+      - POSTGRES_DB=django_app_ci
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=ci-password
+    tmpfs:
+      - /var/lib/postgresql/data  # Use tmpfs for faster CI tests
+
+  test-memcached:
+    image: memcached:1.6.22
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
+    command: memcached -m 64
+
+  test-rabbitmq:
+    image: rabbitmq:3.12.8
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
+    environment:
+      - RABBITMQ_DEFAULT_USER=ci
+      - RABBITMQ_DEFAULT_PASS=ci
+
+  # Parallel test runners
+  unit-tests:
+    extends:
+      service: ci-runner
+    command: /app/ci/test.sh unit
+    depends_on:
+      - test-db
+      - test-memcached
+      - test-rabbitmq
+
+  integration-tests:
+    extends:
+      service: ci-runner
+    command: /app/ci/test.sh integration
+    depends_on:
+      - test-db
+      - test-memcached
+      - test-rabbitmq
+
+  # Code quality checks
+  lint-check:
+    extends:
+      service: ci-runner
+    command: /app/ci/lint.sh
+    volumes:
+      - .:/app
+
+  # Security scans
+  security-scan:
+    image: pyupio/safety:latest
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: safety check -r requirements/base.txt
+
+  # Build verification
+  build-test:
+    extends:
+      service: ci-runner
+    command: /app/ci/build.sh
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  ci_cache:

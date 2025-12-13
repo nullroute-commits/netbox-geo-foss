@@ -1,0 +1,28 @@
+#!/bin/bash
+# Test environment deployment script
+
+set -e
+
+echo "Deploying to test environment..."
+
+# Source environment
+source "$(dirname "$0")/../../scripts/env-loader.sh" test
+
+# Build and start services
+docker compose -f docker-compose.base.yml -f docker-compose.test.yml build
+docker compose -f docker-compose.base.yml -f docker-compose.test.yml up -d
+
+# Wait for services
+echo "Waiting for services to be ready..."
+sleep 10
+
+# Run migrations
+docker compose -f docker-compose.base.yml -f docker-compose.test.yml \
+    exec -T app alembic upgrade head
+
+# Run tests
+echo "Running test suite..."
+docker compose -f docker-compose.base.yml -f docker-compose.test.yml \
+    exec -T app pytest -v --cov=src
+
+echo "Test deployment complete!"

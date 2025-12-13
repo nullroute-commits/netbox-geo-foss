@@ -1,0 +1,141 @@
+---
+- name: Deploy Application to LXC Container
+  hosts: proxmox_cluster
+  gather_facts: yes
+  vars:
+    app_name: enterprise-app
+    deploy_user: "{{ ansible_user | default('deploy') }}"
+    
+  pre_tasks:
+    - name: Validate deployment environment
+      assert:
+        that:
+          - environment is defined
+          - app_version is defined
+          - lxc_vmid is defined
+          - lxc_hostname is defined
+        fail_msg: "Required variables not defined"
+    
+    - name: Display deployment information
+      debug:
+        msg: |
+          Deploying {{ app_name }} version {{ app_version }}
+          Environment: {{ environment }}
+          Target: LXC Container {{ lxc_vmid }} ({{ lxc_hostname }})
+
+  roles:
+    - role: proxmox-common
+      tags: proxmox
+    
+    - role: lxc-container
+      tags: lxc
+
+  tasks:
+    - name: Add container to inventory
+      add_host:
+        name: "{{ lxc_hostname }}"
+        ansible_host: "{{ lxc_container_ip }}"
+        groups: lxc_containers
+      tags: inventory
+
+- name: Configure and deploy application in LXC
+  hosts: lxc_containers
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      tags: setup
+
+    - name: Install required packages
+      apt:
+        name:
+          - python3
+          - python3-pip
+          - python3-venv
+          - git
+          - curl
+        state: present
+      tags: setup
+
+    - name: Create application directory
+      file:
+        path: /opt/{{ app_name }}
+        state: directory
+        owner: "{{ deploy_user }}"
+        mode: '0755'
+      tags: deploy
+
+    - name: Deploy application files
+      # Note: This task uses synchronize/rsync. Ensure rsync is installed on both control node and target.
+      # Alternative: Use git clone if app_repository_url is provided
+      synchronize:
+        src: "{{ playbook_dir }}/../../"
+        dest: "/opt/{{ app_name }}/"
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=__pycache__"
+          - "--exclude=*.pyc"
+      when: app_repository_url is not defined
+      tags: deploy
+
+    - name: Clone application repository (alternative method)
+      git:
+        repo: "{{ app_repository_url }}"
+        dest: "/opt/{{ app_name }}"
+        version: "{{ app_version }}"
+      become_user: "{{ deploy_user }}"
+      when: app_repository_url is defined
+      tags: deploy
+
+    - name: Install Python dependencies
+      pip:
+        requirements: "/opt/{{ app_name }}/requirements/production.txt"
+        virtualenv: "/opt/{{ app_name }}/venv"
+        virtualenv_command: python3 -m venv
+      tags: deploy
+
+    - name: Create systemd service
+      template:
+        src: "{{ playbook_dir }}/../templates/lxc-app.service.j2"
+        dest: "/etc/systemd/system/{{ app_name }}.service"
+        mode: '0644'
+      notify: restart application
+      tags: deploy
+
+    - name: Enable and start application service
+      systemd:
+        name: "{{ app_name }}"
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      tags: deploy
+
+    - name: Wait for application to be ready
+      uri:
+        url: "http://localhost:8000/health"
+        status_code: 200
+      register: health_check
+      until: health_check.status == 200
+      retries: 30
+      delay: 10
+      tags: verify
+
+  handlers:
+    - name: restart application
+      systemd:
+        name: "{{ app_name }}"
+        state: restarted
+
+  post_tasks:
+    - name: Display deployment result
+      debug:
+        msg: |
+          Deployment completed successfully!
+          Application: {{ app_name }}
+          Version: {{ app_version }}
+          Container: {{ lxc_hostname }} ({{ ansible_host }})
+          Health check: Passed

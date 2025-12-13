@@ -1,0 +1,113 @@
+---
+- name: Create QEMU VM
+  community.general.proxmox_kvm:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ qemu_vmid }}"
+    name: "{{ qemu_name }}"
+    ostype: "{{ qemu_ostype }}"
+    memory: "{{ qemu_memory }}"
+    cores: "{{ qemu_cores }}"
+    sockets: "{{ qemu_sockets }}"
+    cpu: "{{ qemu_cpu_type }}"
+    balloon: "{{ qemu_balloon }}"
+    boot: "{{ qemu_boot }}"
+    bios: "{{ qemu_bios }}"
+    onboot: "{{ qemu_onboot }}"
+    protection: "{{ qemu_protection }}"
+    kvm: "{{ qemu_kvm }}"
+    agent: "{{ qemu_agent }}"
+    scsi:
+      scsi0: "{{ qemu_storage }}:{{ qemu_disk_size }},format={{ qemu_disk_format }},cache={{ qemu_cache }}{{ ',ssd=1' if qemu_ssd else '' }}"
+    net:
+      net0: "{{ qemu_net0_model }},bridge={{ qemu_net0_bridge }},firewall={{ 1 if qemu_net0_firewall else 0 }}{{ ',tag=' + qemu_net0_tag if qemu_net0_tag else '' }}"
+    state: present
+  register: qemu_create_result
+  tags:
+    - qemu
+    - create
+
+- name: Configure cloud-init (if enabled)
+  community.general.proxmox_kvm:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ qemu_vmid }}"
+    ciuser: "{{ qemu_ciuser }}"
+    cipassword: "{{ qemu_cipassword | default(omit) }}"
+    sshkeys: "{{ qemu_sshkeys | default(omit) }}"
+    ipconfig:
+      ipconfig0: "{{ qemu_ipconfig0 }}"
+    update: yes
+  when: qemu_cloudinit | bool
+  tags:
+    - qemu
+    - cloudinit
+
+- name: Start QEMU VM
+  community.general.proxmox_kvm:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ qemu_vmid }}"
+    state: started
+  when: qemu_start | bool
+  tags:
+    - qemu
+    - start
+
+- name: Wait for VM to be ready (with SSH check)
+  wait_for:
+    host: "{{ qemu_vm_ip | default('localhost') }}"
+    port: 22
+    delay: 10
+    timeout: 300
+    state: started
+  when: qemu_start | bool and qemu_cloudinit | bool and qemu_vm_ip is defined
+  tags:
+    - qemu
+    - verify
+
+- name: Pause if VM IP is not known
+  pause:
+    seconds: 60
+  when: qemu_start | bool and not qemu_cloudinit | bool
+  tags:
+    - qemu
+    - verify
+
+- name: Get VM status
+  uri:
+    url: "https://{{ proxmox_api_host }}:{{ proxmox_api_port }}/api2/json/nodes/{{ proxmox_node }}/qemu/{{ qemu_vmid }}/status/current"
+    method: GET
+    validate_certs: "{{ proxmox_validate_certs }}"
+    headers:
+      Authorization: "PVEAPIToken={{ proxmox_api_user }}!{{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+  register: qemu_status
+  tags:
+    - qemu
+    - verify
+
+- name: Display VM information
+  debug:
+    msg:
+      - "QEMU VM created successfully"
+      - "VMID: {{ qemu_vmid }}"
+      - "Name: {{ qemu_name }}"
+      - "Status: {{ qemu_status.json.data.status }}"
+      - "Memory: {{ qemu_memory }}MB"
+      - "Cores: {{ qemu_cores }}"
+      - "Disk: {{ qemu_disk_size }}"
+  tags:
+    - qemu
+    - info

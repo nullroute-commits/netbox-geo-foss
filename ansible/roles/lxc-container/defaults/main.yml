@@ -1,0 +1,33 @@
+---
+# Container configuration
+lxc_vmid: 100
+lxc_hostname: "app-container"
+lxc_ostemplate: "local:vztmpl/ubuntu-22.04-standard_amd64.tar.zst"
+lxc_password: ""
+lxc_ssh_public_keys: ""
+
+# Resource allocation
+lxc_memory: 2048
+lxc_swap: 512
+lxc_cores: 2
+lxc_disk_size: "20"
+lxc_storage: "{{ proxmox_storage_local }}"
+
+# Network configuration
+lxc_net0_name: "eth0"
+lxc_net0_bridge: "{{ proxmox_network_bridge }}"
+lxc_net0_ip: "dhcp"
+lxc_net0_gw: ""
+lxc_net0_tag: ""
+
+# Container features
+lxc_unprivileged: yes
+lxc_onboot: yes
+lxc_start: yes
+lxc_protection: no
+
+# Application deployment
+lxc_app_name: "enterprise-app"
+lxc_app_version: "latest"
+lxc_deploy_method: "ansible"  # ansible, docker, or systemd
+lxc_app_exec_start: "/opt/{{ lxc_app_name }}/venv/bin/uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 4"

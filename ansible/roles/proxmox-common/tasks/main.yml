@@ -1,0 +1,59 @@
+---
+- name: Install Proxmox API Python library
+  pip:
+    name:
+      - proxmoxer
+      - requests
+    state: present
+  become: yes
+  tags:
+    - proxmox
+    - setup
+
+- name: Verify Proxmox API connectivity
+  uri:
+    url: "https://{{ proxmox_api_host }}:{{ proxmox_api_port }}/api2/json/version"
+    method: GET
+    validate_certs: "{{ proxmox_validate_certs }}"
+    headers:
+      Authorization: "PVEAPIToken={{ proxmox_api_user }}!{{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+  register: proxmox_version
+  failed_when: proxmox_version.status != 200
+  tags:
+    - proxmox
+    - verify
+
+- name: Display Proxmox version
+  debug:
+    msg: "Connected to Proxmox VE version {{ proxmox_version.json.data.version }}"
+  tags:
+    - proxmox
+    - verify
+
+- name: Get Proxmox node status
+  uri:
+    url: "https://{{ proxmox_api_host }}:{{ proxmox_api_port }}/api2/json/nodes/{{ proxmox_node }}/status"
+    method: GET
+    validate_certs: "{{ proxmox_validate_certs }}"
+    headers:
+      Authorization: "PVEAPIToken={{ proxmox_api_user }}!{{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+  register: proxmox_node_status
+  tags:
+    - proxmox
+    - verify
+
+- name: Verify storage availability
+  uri:
+    url: "https://{{ proxmox_api_host }}:{{ proxmox_api_port }}/api2/json/nodes/{{ proxmox_node }}/storage/{{ item }}/status"
+    method: GET
+    validate_certs: "{{ proxmox_validate_certs }}"
+    headers:
+      Authorization: "PVEAPIToken={{ proxmox_api_user }}!{{ proxmox_api_token_id }}={{ proxmox_api_token_secret }}"
+  loop:
+    - "{{ proxmox_storage_local }}"
+    - "{{ proxmox_storage_templates }}"
+  register: storage_status
+  tags:
+    - proxmox
+    - verify
+    - storage

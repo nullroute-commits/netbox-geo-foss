@@ -1,0 +1,178 @@
+---
+- name: Deploy Enterprise Application
+  hosts: all
+  gather_facts: yes
+  vars:
+    app_name: enterprise-app
+    deploy_user: "{{ ansible_user | default('deploy') }}"
+    deploy_group: "{{ deploy_user }}"
+    
+  pre_tasks:
+    - name: Validate deployment environment
+      assert:
+        that:
+          - environment is defined
+          - app_version is defined
+          - deploy_path is defined
+        fail_msg: "Required variables not defined"
+    
+    - name: Display deployment information
+      debug:
+        msg: |
+          Deploying {{ app_name }} version {{ app_version }}
+          Environment: {{ environment }}
+          Target hosts: {{ ansible_play_hosts | join(', ') }}
+
+  tasks:
+    # Preparation
+    - name: Ensure deployment directory exists
+      file:
+        path: "{{ deploy_path }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_group }}"
+        mode: '0755'
+      become: yes
+
+    - name: Create required subdirectories
+      file:
+        path: "{{ deploy_path }}/{{ item }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_group }}"
+        mode: '0755'
+      become: yes
+      loop:
+        - config
+        - logs
+        - data
+        - backups
+
+    # Docker deployment
+    - name: Log in to Docker registry
+      community.docker.docker_login:
+        registry_url: "{{ docker_registry }}"
+        username: "{{ docker_registry_user | default(omit) }}"
+        password: "{{ docker_registry_password | default(omit) }}"
+      when: docker_registry != 'localhost:5000'
+      no_log: true
+
+    - name: Pull Docker image
+      community.docker.docker_image:
+        name: "{{ docker_registry }}/{{ app_name }}:{{ app_version }}"
+        source: pull
+        force_source: yes
+
+    - name: Deploy application configuration
+      template:
+        src: "{{ item.src }}"
+        dest: "{{ deploy_path }}/config/{{ item.dest }}"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_group }}"
+        mode: '0640'
+      loop:
+        - { src: "app.env.j2", dest: ".env" }
+        - { src: "docker-compose.yml.j2", dest: "docker-compose.yml" }
+      notify: restart application
+
+    # Database migrations
+    - name: Run database migrations
+      community.docker.docker_container:
+        name: "{{ app_name }}-migrate"
+        image: "{{ docker_registry }}/{{ app_name }}:{{ app_version }}"
+        command: alembic upgrade head
+        env_file: "{{ deploy_path }}/config/.env"
+        networks:
+          - name: "{{ app_name }}_network"
+        state: started
+        detach: no
+        cleanup: yes
+      run_once: true
+      delegate_to: "{{ groups['app_servers'][0] }}"
+      when: "'app_servers' in group_names"
+
+    # Deploy application
+    - name: Deploy application containers
+      community.docker.docker_compose:
+        project_src: "{{ deploy_path }}/config"
+        state: present
+        restarted: yes
+        pull: yes
+      register: deploy_result
+
+    # Health checks
+    - name: Wait for application to be ready
+      uri:
+        url: "http://{{ ansible_host }}:{{ app_port }}/health"
+        status_code: 200
+        timeout: 5
+      register: health_check
+      until: health_check.status == 200
+      retries: 30
+      delay: 10
+
+    # Post-deployment tasks
+    - name: Clear application cache
+      docker_container:
+        name: "{{ app_name }}-cache-clear"
+        image: "{{ docker_registry }}/{{ app_name }}:{{ app_version }}"
+        command: python -m src.cli cache clear
+        env_file: "{{ deploy_path }}/config/.env"
+        networks:
+          - name: "{{ app_name }}_network"
+        state: started
+        detach: no
+        cleanup: yes
+      when: environment == 'production'
+
+    - name: Collect static files
+      docker_container:
+        name: "{{ app_name }}-collectstatic"
+        image: "{{ docker_registry }}/{{ app_name }}:{{ app_version }}"
+        command: python -m src.cli collectstatic --no-input
+        env_file: "{{ deploy_path }}/config/.env"
+        volumes:
+          - "{{ deploy_path }}/data/static:/app/static"
+        state: started
+        detach: no
+        cleanup: yes
+      when: environment == 'production'
+
+  handlers:
+    - name: restart application
+      docker_compose:
+        project_src: "{{ deploy_path }}/config"
+        restarted: yes
+
+  post_tasks:
+    - name: Verify deployment
+      uri:
+        url: "http://{{ ansible_host }}:{{ app_port }}/api/v1/version"
+        return_content: yes
+      register: version_check
+
+    - name: Display deployment result
+      debug:
+        msg: |
+          Deployment completed successfully!
+          Deployed version: {{ (version_check.content | from_json).version }}
+          Environment: {{ (version_check.content | from_json).environment }}
+
+    - name: Send deployment notification
+      uri:
+        url: "{{ slack_webhook_url | default('') }}"
+        method: POST
+        body_format: json
+        body:
+          text: |
+            :rocket: Deployment completed!
+            Application: {{ app_name }}
+            Version: {{ app_version }}
+            Environment: {{ environment }}
+            Status: Success
+      when: slack_webhook_url is defined
+      ignore_errors: yes
+
+# Include environment-specific tasks
+- import_playbook: "deploy-{{ environment }}.yml"
+  when: environment is defined

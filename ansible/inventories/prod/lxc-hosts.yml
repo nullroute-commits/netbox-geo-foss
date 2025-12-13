@@ -1,0 +1,61 @@
+---
+# LXC Hosts Inventory for Production Environment
+
+proxmox_cluster:
+  hosts:
+    pve1.example.com:
+      ansible_host: 192.168.1.10
+      proxmox_api_host: 192.168.1.10
+      proxmox_node: pve1
+    pve2.example.com:
+      ansible_host: 192.168.1.11
+      proxmox_api_host: 192.168.1.11
+      proxmox_node: pve2
+  vars:
+    ansible_user: root
+    ansible_python_interpreter: /usr/bin/python3
+    proxmox_api_port: 8006
+    proxmox_api_user: "root@pam"
+    proxmox_api_token_id: "ansible"
+    proxmox_api_token_secret: "{{ lookup('env', 'PROXMOX_API_TOKEN') }}"
+    proxmox_validate_certs: yes
+
+lxc_containers:
+  hosts:
+    # LXC containers will be dynamically added during deployment
+  vars:
+    ansible_user: root
+    ansible_python_interpreter: /usr/bin/python3
+
+# Application-specific LXC container definitions
+app_lxc_containers:
+  hosts:
+    app-web-lxc-01:
+      lxc_vmid: 100
+      lxc_hostname: app-web-01
+      lxc_memory: 4096
+      lxc_cores: 4
+      lxc_net0_ip: "192.168.1.100/24"
+      lxc_net0_gw: "192.168.1.1"
+    app-web-lxc-02:
+      lxc_vmid: 101
+      lxc_hostname: app-web-02
+      lxc_memory: 4096
+      lxc_cores: 4
+      lxc_net0_ip: "192.168.1.101/24"
+      lxc_net0_gw: "192.168.1.1"
+    app-db-lxc:
+      lxc_vmid: 110
+      lxc_hostname: app-db-01
+      lxc_memory: 8192
+      lxc_cores: 4
+      lxc_net0_ip: "192.168.1.110/24"
+      lxc_net0_gw: "192.168.1.1"
+      lxc_disk_size: "100"
+  vars:
+    lxc_ostemplate: "local:vztmpl/ubuntu-22.04-standard_amd64.tar.zst"
+    lxc_unprivileged: yes
+    lxc_onboot: yes
+    lxc_start: yes
+    environment: production
+    deploy_path: "/opt/enterprise-app"

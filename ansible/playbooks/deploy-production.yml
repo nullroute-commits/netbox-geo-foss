@@ -1,0 +1,92 @@
+---
+- name: Production-specific deployment tasks
+  hosts: production
+  gather_facts: no
+  
+  tasks:
+    # Load balancer management
+    - name: Remove server from load balancer
+      uri:
+        url: "http://{{ hostvars[item]['ansible_host'] }}:8080/api/server/{{ inventory_hostname }}/disable"
+        method: POST
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['lb_servers'] }}"
+      when: "'app_servers' in group_names"
+      
+    - name: Wait for connections to drain
+      pause:
+        seconds: 30
+      when: "'app_servers' in group_names"
+
+    # Backup before deployment
+    - name: Create pre-deployment backup
+      docker_container:
+        name: "{{ app_name }}-backup"
+        image: "{{ docker_registry }}/{{ app_name }}:{{ app_version }}"
+        command: python -m src.cli backup create --type pre-deploy
+        env_file: "{{ deploy_path }}/config/.env"
+        volumes:
+          - "{{ deploy_path }}/backups:/backups"
+        state: started
+        detach: no
+        cleanup: yes
+      run_once: true
+      delegate_to: "{{ groups['db_servers'][0] }}"
+      when: "'db_servers' in group_names"
+
+    # Blue-green deployment
+    - name: Deploy to blue environment
+      docker_compose:
+        project_src: "{{ deploy_path }}/config"
+        project_name: "{{ app_name }}_blue"
+        state: present
+        pull: yes
+      when: deployment_strategy | default('rolling') == 'blue-green'
+
+    - name: Switch traffic to blue environment
+      lineinfile:
+        path: "{{ deploy_path }}/config/nginx.conf"
+        regexp: '^upstream app_backend'
+        line: 'upstream app_backend { server blue:8000; }'
+      notify: reload nginx
+      when: deployment_strategy | default('rolling') == 'blue-green'
+
+    # Add server back to load balancer
+    - name: Add server back to load balancer
+      uri:
+        url: "http://{{ hostvars[item]['ansible_host'] }}:8080/api/server/{{ inventory_hostname }}/enable"
+        method: POST
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['lb_servers'] }}"
+      when: "'app_servers' in group_names"
+
+    # Monitoring and alerting
+    - name: Update monitoring configuration
+      template:
+        src: prometheus-target.yml.j2
+        dest: /etc/prometheus/targets/{{ app_name }}.yml
+      delegate_to: "{{ groups['monitoring'][0] }}"
+      when: "'monitoring' in groups"
+      notify: reload prometheus
+
+    - name: Create deployment marker in monitoring
+      uri:
+        url: "http://{{ groups['monitoring'][0] }}:9090/api/v1/admin/tsdb/snapshot"
+        method: POST
+        body:
+          annotation:
+            deployment: "{{ app_name }}-{{ app_version }}"
+            environment: "{{ environment }}"
+            timestamp: "{{ ansible_date_time.epoch }}"
+      when: "'monitoring' in groups"
+
+  handlers:
+    - name: reload nginx
+      docker_container:
+        name: nginx
+        command: nginx -s reload
+        
+    - name: reload prometheus
+      docker_container:
+        name: prometheus
+        command: kill -HUP 1

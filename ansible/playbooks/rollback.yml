@@ -1,0 +1,120 @@
+---
+- name: Rollback Enterprise Application
+  hosts: all
+  gather_facts: yes
+  vars:
+    app_name: enterprise-app
+    
+  pre_tasks:
+    - name: Confirm rollback
+      pause:
+        prompt: |
+          WARNING: You are about to rollback {{ app_name }} in {{ environment }}
+          Current version: {{ current_version | default('unknown') }}
+          Target version: {{ rollback_version }}
+          
+          Press Enter to continue or Ctrl+C to abort
+      when: confirm_rollback | default(true) | bool
+
+    - name: Check if rollback version exists
+      docker_image_info:
+        name: "{{ docker_registry }}/{{ app_name }}:{{ rollback_version }}"
+      register: rollback_image
+      failed_when: rollback_image.images | length == 0
+
+  tasks:
+    # Create rollback backup
+    - name: Backup current state before rollback
+      docker_container:
+        name: "{{ app_name }}-rollback-backup"
+        image: "{{ docker_registry }}/{{ app_name }}:{{ current_version }}"
+        command: python -m src.cli backup create --type pre-rollback
+        env_file: "{{ deploy_path }}/config/.env"
+        volumes:
+          - "{{ deploy_path }}/backups:/backups"
+        state: started
+        detach: no
+        cleanup: yes
+
+    # Stop current version
+    - name: Stop current application
+      docker_compose:
+        project_src: "{{ deploy_path }}/config"
+        state: absent
+        remove_orphans: yes
+
+    # Deploy previous version
+    - name: Deploy rollback version
+      docker_compose:
+        project_src: "{{ deploy_path }}/config"
+        state: present
+        pull: yes
+      environment:
+        APP_VERSION: "{{ rollback_version }}"
+
+    # Database rollback if needed
+    - name: Check for database migrations to rollback
+      docker_container:
+        name: "{{ app_name }}-migration-check"
+        image: "{{ docker_registry }}/{{ app_name }}:{{ rollback_version }}"
+        command: alembic history -v
+        env_file: "{{ deploy_path }}/config/.env"
+        state: started
+        detach: no
+        cleanup: yes
+      register: migration_history
+
+    - name: Rollback database migrations if needed
+      docker_container:
+        name: "{{ app_name }}-migrate-rollback"
+        image: "{{ docker_registry }}/{{ app_name }}:{{ rollback_version }}"
+        command: "alembic downgrade {{ rollback_migration | default('-1') }}"
+        env_file: "{{ deploy_path }}/config/.env"
+        state: started
+        detach: no
+        cleanup: yes
+      when: rollback_migrations | default(false) | bool
+
+    # Verify rollback
+    - name: Wait for application to be ready
+      uri:
+        url: "http://{{ ansible_host }}:{{ app_port }}/health"
+        status_code: 200
+      register: health_check
+      until: health_check.status == 200
+      retries: 30
+      delay: 10
+
+    - name: Verify rollback version
+      uri:
+        url: "http://{{ ansible_host }}:{{ app_port }}/api/v1/version"
+        return_content: yes
+      register: version_check
+      failed_when: (version_check.content | from_json).version != rollback_version
+
+  post_tasks:
+    - name: Clear caches after rollback
+      docker_container:
+        name: "{{ app_name }}-cache-clear"
+        image: "{{ docker_registry }}/{{ app_name }}:{{ rollback_version }}"
+        command: python -m src.cli cache clear --all
+        env_file: "{{ deploy_path }}/config/.env"
+        state: started
+        detach: no
+        cleanup: yes
+
+    - name: Send rollback notification
+      uri:
+        url: "{{ slack_webhook_url | default('') }}"
+        method: POST
+        body_format: json
+        body:
+          text: |
+            :warning: Rollback completed!
+            Application: {{ app_name }}
+            Rolled back from: {{ current_version }}
+            Rolled back to: {{ rollback_version }}
+            Environment: {{ environment }}
+            Reason: {{ rollback_reason | default('Not specified') }}
+      when: slack_webhook_url is defined
+      ignore_errors: yes

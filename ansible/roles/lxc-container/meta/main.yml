@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  author: DevOps Team
+  description: LXC container management for Proxmox VE
+  company: Enterprise
+  license: MIT
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+  galaxy_tags:
+    - proxmox
+    - lxc
+    - containers
+
+dependencies:
+  - role: proxmox-common

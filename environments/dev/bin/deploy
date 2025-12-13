@@ -1,0 +1,26 @@
+#!/bin/bash
+# Development deployment script
+
+set -e
+
+echo "Deploying to development environment..."
+
+# Source environment
+source "$(dirname "$0")/../../scripts/env-loader.sh" dev
+
+# Build and start services
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml build
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d
+
+# Run migrations
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml \
+    exec -T app alembic upgrade head
+
+# Seed development data
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml \
+    exec -T app python scripts/seed_dev_data.py
+
+echo "Development deployment complete!"
+echo "Application available at: http://localhost:8000"
+echo "PgAdmin available at: http://localhost:5050"
+echo "MailHog available at: http://localhost:8025"

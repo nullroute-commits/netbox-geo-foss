@@ -1,0 +1,120 @@
+# Docker Compose for CI/CD Pipeline Execution
+version: '3.9'
+
+services:
+  # CI/CD Pipeline Executor
+  pipeline-executor:
+    build:
+      context: ./docker/pipeline-executor
+      dockerfile: Dockerfile
+    container_name: pipeline-executor
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-dev}
+      - BUILD_ID=${BUILD_ID:-local}
+      - COMMIT_SHA=${COMMIT_SHA:-latest}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/workspace:ro
+      - pipeline-cache:/cache
+      - pipeline-artifacts:/artifacts
+    networks:
+      - pipeline-network
+    command: ${PIPELINE_COMMAND:-test}
+
+  # Test Database
+  test-db:
+    image: postgres:16-alpine
+    container_name: pipeline-postgres
+    environment:
+      - POSTGRES_USER=pipeline_user
+      - POSTGRES_PASSWORD=pipeline_password
+      - POSTGRES_DB=pipeline_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - pipeline-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pipeline_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Test Cache
+  test-cache:
+    image: redis:7-alpine
+    container_name: pipeline-redis
+    command: redis-server --save ""
+    tmpfs:
+      - /data
+    networks:
+      - pipeline-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Code Quality Scanner
+  sonarqube-scanner:
+    image: sonarsource/sonar-scanner-cli:latest
+    container_name: pipeline-sonar-scanner
+    environment:
+      - SONAR_HOST_URL=${SONAR_HOST_URL:-http://sonarqube:9000}
+      - SONAR_TOKEN=${SONAR_TOKEN}
+    volumes:
+      - ./:/usr/src
+    networks:
+      - pipeline-network
+    depends_on:
+      - pipeline-executor
+
+  # Security Scanner
+  security-scanner:
+    image: aquasec/trivy:latest
+    container_name: pipeline-security-scanner
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - trivy-cache:/root/.cache/trivy
+      - ./:/workspace
+    networks:
+      - pipeline-network
+    command: image --format json --output /workspace/trivy-report.json ${IMAGE_TO_SCAN:-enterprise-app:latest}
+
+  # Performance Tester
+  performance-tester:
+    image: grafana/k6:latest
+    container_name: pipeline-k6
+    volumes:
+      - ./tests/performance:/scripts
+      - ./reports:/reports
+    networks:
+      - pipeline-network
+    command: run --out json=/reports/k6-results.json /scripts/load-test.js
+
+  # Artifact Publisher
+  artifact-publisher:
+    image: minio/mc:latest
+    container_name: pipeline-artifact-publisher
+    environment:
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-http://minio:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+    volumes:
+      - pipeline-artifacts:/artifacts
+    networks:
+      - pipeline-network
+    entrypoint: |
+      sh -c '
+        mc alias set artifacts $${MINIO_ENDPOINT} $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY}
+        mc mb -p artifacts/pipeline-artifacts
+        mc cp -r /artifacts/* artifacts/pipeline-artifacts/
+      '
+
+volumes:
+  pipeline-cache:
+  pipeline-artifacts:
+  trivy-cache:
+
+networks:
+  pipeline-network:
+    driver: bridge

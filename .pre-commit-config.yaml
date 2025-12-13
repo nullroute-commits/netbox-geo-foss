@@ -1,0 +1,142 @@
+# Pre-commit hooks configuration
+default_language_version:
+  python: python3.13
+
+repos:
+  # General hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--unsafe']
+      - id: check-json
+      - id: check-toml
+      - id: check-xml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: detect-private-key
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'production']
+
+  # Python code formatting
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        language_version: python3.13
+        args: ['--line-length=88']
+
+  # Python import sorting
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ['--profile', 'black']
+
+  # Python linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.1
+    hooks:
+      - id: ruff
+        args: ['--fix', '--exit-non-zero-on-fix']
+
+  # Python type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [
+          'types-requests',
+          'types-PyYAML',
+          'types-redis',
+          'types-python-dateutil',
+          'pydantic',
+        ]
+        args: ['--ignore-missing-imports', '--install-types', '--non-interactive']
+
+  # Security checks
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.0
+    hooks:
+      - id: bandit
+        args: ['-c', '.bandit', '-r', 'src']
+        exclude: '^tests/'
+
+  # Secrets detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: '^(poetry\.lock|package-lock\.json|yarn\.lock)$'
+
+  # SQL linting
+  - repo: https://github.com/sqlfluff/sqlfluff
+    rev: 3.2.0
+    hooks:
+      - id: sqlfluff-lint
+        args: ['--dialect', 'postgres']
+        files: \.(sql|sql\.j2)$
+      - id: sqlfluff-fix
+        args: ['--dialect', 'postgres']
+        files: \.(sql|sql\.j2)$
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint
+        args: ['--ignore', 'DL3008', '--ignore', 'DL3009']
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: ['-c', '.yamllint.yml']
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.42.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix']
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: ['--severity=warning']
+
+  # Terraform formatting (if using Terraform)
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.96.1
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_docs
+      - id: terraform_validate
+      - id: terraform_tflint
+
+  # License headers
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.5
+    hooks:
+      - id: insert-license
+        files: \.py$
+        args:
+          - --license-filepath
+          - .license-header.txt
+          - --comment-style
+          - "#"
+        exclude: ^(tests/|docs/|migrations/)

@@ -1,0 +1,71 @@
+version: '3.8'
+
+# Testing Docker Compose configuration
+# Last updated: 2025-08-30 22:40:55 UTC by nullroute-commits
+
+services:
+  web:
+    extends:
+      file: docker-compose.base.yml
+      service: web
+    build:
+      target: testing
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.testing
+      - DEBUG=False
+      - TESTING=True
+    env_file:
+      - environments/.env.testing.example
+    command: python manage.py test --verbosity=2
+
+  db:
+    extends:
+      file: docker-compose.base.yml
+      service: db
+    environment:
+      - POSTGRES_DB=django_app_test
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=test-password
+    tmpfs:
+      - /var/lib/postgresql/data  # Use tmpfs for faster tests
+
+  memcached:
+    extends:
+      file: docker-compose.base.yml
+      service: memcached
+
+  rabbitmq:
+    extends:
+      file: docker-compose.base.yml
+      service: rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=test
+      - RABBITMQ_DEFAULT_PASS=test
+
+  # Test runner service
+  test-runner:
+    extends:
+      service: web
+    command: >
+      sh -c "
+        python manage.py migrate --noinput &&
+        python manage.py collectstatic --noinput &&
+        python manage.py test --verbosity=2 --parallel --keepdb
+      "
+    depends_on:
+      - db
+      - memcached
+      - rabbitmq
+
+  # Code quality checks
+  linter:
+    extends:
+      service: web
+    command: >
+      sh -c "
+        flake8 app/ config/ --max-line-length=120 &&
+        black --check app/ config/ &&
+        mypy app/ config/
+      "
+    volumes:
+      - .:/app

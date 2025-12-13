@@ -1,0 +1,80 @@
+# Development Docker Compose configuration
+version: '3.9'
+
+services:
+  app:
+    <<: *app-common
+    container_name: enterprise-app-dev
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+    env_file:
+      - ./environments/dev/.env
+      - ./environments/dev/.env.local
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - ./logs:/app/logs
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+      "
+
+  postgres:
+    container_name: enterprise-postgres-dev
+    environment:
+      - POSTGRES_USER=dev_user
+      - POSTGRES_PASSWORD=dev_password
+      - POSTGRES_DB=enterprise_dev
+    env_file:
+      - ./environments/dev/.env.db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data-dev:/var/lib/postgresql/data
+
+  redis:
+    container_name: enterprise-redis-dev
+    environment:
+      - REDIS_PASSWORD=dev_redis_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data-dev:/data
+
+  nginx:
+    container_name: enterprise-nginx-dev
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+
+  # Development-only services
+  mailhog:
+    image: mailhog/mailhog
+    container_name: enterprise-mailhog-dev
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - app-network
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: enterprise-pgadmin-dev
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@dev.local
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    networks:
+      - app-network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres-data-dev:
+  redis-data-dev:

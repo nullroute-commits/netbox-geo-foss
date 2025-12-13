@@ -1,0 +1,54 @@
+#!/bin/bash
+# Production deployment script
+
+set -e
+
+echo "Deploying to production environment..."
+
+# Verify we're in production mode
+if [ "$1" != "--confirm-production" ]; then
+    echo "Error: Production deployment requires --confirm-production flag"
+    exit 1
+fi
+
+# Source environment
+source "$(dirname "$0")/../../scripts/env-loader.sh" prod
+
+# Load secrets from vault
+echo "Loading secrets from vault..."
+vault kv get -format=json secret/enterprise-app/prod | \
+    jq -r '.data.data | to_entries[] | "\(.key)=\(.value)"' > /tmp/prod-secrets
+source /tmp/prod-secrets
+rm /tmp/prod-secrets
+
+# Pull latest images
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml pull
+
+# Deploy with rolling update
+echo "Starting rolling deployment..."
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml \
+    up -d --no-deps --scale app=6 app
+
+# Wait for new containers to be healthy
+echo "Waiting for health checks..."
+sleep 30
+
+# Run migrations
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml \
+    exec -T app alembic upgrade head
+
+# Remove old containers
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml \
+    up -d --no-deps --scale app=3 app
+
+# Clear caches
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml \
+    exec -T redis redis-cli FLUSHDB
+
+echo "Production deployment complete!"
+echo "Running post-deployment checks..."
+
+# Health checks
+curl -f https://api.example.com/health || exit 1
+
+echo "Deployment successful!"
