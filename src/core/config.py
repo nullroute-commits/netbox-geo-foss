@@ -18,46 +18,46 @@ class Settings(BaseSettings):
     )
 
     # Application
-    app_name: str = Field(default="Enterprise App", env="APP_NAME")
-    app_version: str = Field(default="1.0.0", env="APP_VERSION")
-    environment: str = Field(default="development", env="ENVIRONMENT")
-    debug: bool = Field(default=False, env="DEBUG")
+    app_name: str = Field(default="Enterprise App")
+    app_version: str = Field(default="1.0.0")
+    environment: str = Field(default="development")
+    debug: bool = Field(default=False)
 
     # API Settings
-    api_prefix: str = Field(default="/api/v1", env="API_PREFIX")
-    api_host: str = Field(default="0.0.0.0", env="API_HOST")
-    api_port: int = Field(default=8000, env="API_PORT")
-    api_workers: int = Field(default=4, env="API_WORKERS")
+    api_prefix: str = Field(default="/api/v1")
+    api_host: str = Field(default="0.0.0.0")
+    api_port: int = Field(default=8000)
+    api_workers: int = Field(default=4)
 
     # Security
-    secret_key: str = Field(..., env="SECRET_KEY")
-    access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
-    refresh_token_expire_days: int = Field(default=7, env="REFRESH_TOKEN_EXPIRE_DAYS")
-    allowed_origins: list[str] = Field(default=["http://localhost:3000"], env="ALLOWED_ORIGINS")
+    secret_key: str
+    access_token_expire_minutes: int = Field(default=30)
+    refresh_token_expire_days: int = Field(default=7)
+    allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
     # Database
-    database_url: str = Field(..., env="DATABASE_URL")
-    database_pool_size: int = Field(default=20, env="DATABASE_POOL_SIZE")
-    database_max_overflow: int = Field(default=0, env="DATABASE_MAX_OVERFLOW")
-    database_echo: bool = Field(default=False, env="DATABASE_ECHO")
+    database_url: str
+    database_pool_size: int = Field(default=20)
+    database_max_overflow: int = Field(default=0)
+    database_echo: bool = Field(default=False)
 
     # Redis
-    redis_url: str = Field(..., env="REDIS_URL")
-    redis_pool_size: int = Field(default=10, env="REDIS_POOL_SIZE")
+    redis_url: str
+    redis_pool_size: int = Field(default=10)
 
     # Logging
-    log_level: str = Field(default="INFO", env="LOG_LEVEL")
-    log_format: str = Field(default="json", env="LOG_FORMAT")
+    log_level: str = Field(default="INFO")
+    log_format: str = Field(default="json")
 
     # Monitoring
-    enable_metrics: bool = Field(default=True, env="ENABLE_METRICS")
-    enable_tracing: bool = Field(default=True, env="ENABLE_TRACING")
-    jaeger_endpoint: Optional[str] = Field(default=None, env="JAEGER_ENDPOINT")
+    enable_metrics: bool = Field(default=True)
+    enable_tracing: bool = Field(default=True)
+    jaeger_endpoint: Optional[str] = Field(default=None)
 
     # Feature Flags
-    enable_rate_limiting: bool = Field(default=True, env="ENABLE_RATE_LIMITING")
-    rate_limit_requests: int = Field(default=100, env="RATE_LIMIT_REQUESTS")
-    rate_limit_period: int = Field(default=60, env="RATE_LIMIT_PERIOD")
+    enable_rate_limiting: bool = Field(default=True)
+    rate_limit_requests: int = Field(default=100)
+    rate_limit_period: int = Field(default=60)
 
     @field_validator("environment")
     @classmethod
