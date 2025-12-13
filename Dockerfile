@@ -47,7 +47,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libgeos-c1v5 \
     libproj25 \
-    libgdal34 \
+    gdal-bin \
+    libgdal32 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory and cache directory
