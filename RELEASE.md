@@ -109,9 +109,12 @@ If issues are found after release:
 If critical security issue or broken package:
 
 ```bash
-# Yank release from PyPI (does not delete)
-pip install twine
-twine upload --skip-existing dist/*
+# Option 1: Yank via PyPI web interface (recommended)
+# Go to https://pypi.org/manage/project/netbox-geo-foss/releases/
+# Click on the release and select "Yank"
+
+# Option 2: Yank via twine (if supported)
+# Note: Yanking does not delete the release, just marks it as unsuitable
 ```
 
 Note: Cannot yank GitHub releases, only mark as draft/pre-release.
