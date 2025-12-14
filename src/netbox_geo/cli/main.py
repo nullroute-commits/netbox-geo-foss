@@ -29,7 +29,7 @@ console = Console()
     help="Enable debug mode",
 )
 def cli(verbose: bool, debug: bool) -> None:
-    """NetBox Geographic Data Integration CLI.
+    """Integrate geographic data from FOSS sources with NetBox.
 
     Enterprise FOSS tool for integrating geographic data from GeoNames,
     Natural Earth, and OpenStreetMap with NetBox.

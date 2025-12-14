@@ -79,7 +79,7 @@ class RateLimiter:
 
 
 def rate_limit(calls_per_minute: int = 100) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Decorator to rate limit function calls.
+    """Rate limit function calls with a decorator.
 
     Note: Creates a separate RateLimiter instance per decorated function.
     If you need a global rate limit, use a shared RateLimiter instance instead.
