@@ -17,9 +17,9 @@ jobs:
   # Code Quality & Security Checks
   quality-checks:
     name: Code Quality & Security
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     container:
-      image: python:3.13-slim
+      image: python:3.12-slim
       options: --user root
     steps:
       - name: Checkout code
@@ -58,7 +58,7 @@ jobs:
   # Unit Tests with Coverage
   unit-tests:
     name: Unit Tests
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         environment: [dev, test]
@@ -109,7 +109,7 @@ jobs:
   integration-tests:
     name: Integration Tests
     needs: [quality-checks, unit-tests]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -143,7 +143,7 @@ jobs:
   build-images:
     name: Build Docker Images
     needs: [integration-tests]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     steps:
       - name: Checkout code
@@ -185,7 +185,7 @@ jobs:
   security-scan:
     name: Container Security Scan
     needs: [build-images]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     steps:
       - name: Run Trivy vulnerability scanner
@@ -207,7 +207,7 @@ jobs:
   deploy:
     name: Deploy Application
     needs: [security-scan]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.event_name == 'push'
     strategy:
       matrix:
@@ -256,7 +256,7 @@ jobs:
   build-lxc-template:
     name: Build LXC Template
     needs: [security-scan]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
@@ -289,7 +289,7 @@ jobs:
   deploy-lxc:
     name: Deploy to LXC
     needs: [security-scan]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     permissions:
       contents: read
@@ -345,7 +345,7 @@ jobs:
   deploy-vm:
     name: Deploy to QEMU VM
     needs: [security-scan]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     permissions:
       contents: read
@@ -404,7 +404,7 @@ jobs:
   performance-tests:
     name: Performance Tests
     needs: [deploy]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: matrix.environment == 'staging'
     steps:
       - name: Checkout code
@@ -427,7 +427,7 @@ jobs:
   cleanup:
     name: Cleanup Resources
     needs: [deploy]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Clean up Docker resources
