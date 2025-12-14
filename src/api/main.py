@@ -25,10 +25,13 @@ logger = setup_logging()
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
-    logger.info("Starting application", extra={
-        "environment": settings.environment,
-        "version": get_version_info()["version"],
-    })
+    logger.info(
+        "Starting application",
+        extra={
+            "environment": settings.environment,
+            "version": get_version_info()["version"],
+        },
+    )
 
     # Initialize database
     # await init_database()

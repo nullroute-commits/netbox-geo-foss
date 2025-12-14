@@ -23,9 +23,7 @@ def setup_logging() -> structlog.BoundLogger:
             timestamp=True,
         )
     else:
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     # Configure root logger
     root_logger = logging.getLogger()
@@ -60,8 +58,11 @@ def setup_logging() -> structlog.BoundLogger:
                 ]
             ),
             structlog.processors.EventRenamer("message"),
-            structlog.processors.JSONRenderer() if settings.log_format == "json"
-            else structlog.dev.ConsoleRenderer(colors=settings.is_development),
+            (
+                structlog.processors.JSONRenderer()
+                if settings.log_format == "json"
+                else structlog.dev.ConsoleRenderer(colors=settings.is_development)
+            ),
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),

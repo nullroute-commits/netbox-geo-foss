@@ -7,7 +7,7 @@ name = "netbox-geo-foss"
 version = "1.0.0"
 description = "Enterprise FOSS Geographic Data Integration for NetBox 4.4.8+"
 readme = "README.md"
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.12,<3.14"
 license = {text = "MIT"}
 authors = [
     {name = "nullroute-commits"}
@@ -18,6 +18,7 @@ classifiers = [
     "Intended Audience :: System Administrators",
     "Intended Audience :: Telecommunications Industry",
     "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: System :: Networking",
@@ -70,7 +71,7 @@ include = '\.pyi?$'
 [tool.isort]
 profile = "black"
 line_length = 100
-py_version = "313"
+py_version = "312"
 known_first_party = ["netbox_geo"]
 
 [tool.mypy]

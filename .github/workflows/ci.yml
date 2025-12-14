@@ -7,7 +7,7 @@ on:
     branches: [main, develop]
 
 env:
-  PYTHON_VERSION: "3.13.1"
+  PYTHON_VERSION: "3.12"
 
 jobs:
   code-quality:
@@ -81,7 +81,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.13.1"]
+        python-version: ["3.12"]
 
     steps:
       - name: Checkout code
@@ -97,8 +97,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements/dev.txt
+          pip install -e .
 
       - name: Run tests
+        env:
+          SECRET_KEY: test-secret-key-for-ci
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          REDIS_URL: redis://localhost:6379/15
         run: pytest --cov=netbox_geo --cov-report=xml --cov-report=html --cov-report=term-missing
 
       - name: Upload coverage to Codecov

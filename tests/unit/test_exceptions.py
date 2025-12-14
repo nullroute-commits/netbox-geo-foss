@@ -1,7 +1,5 @@
 """Unit tests for core exceptions."""
 
-import pytest
-
 from netbox_geo.core.exceptions import (
     DataValidationError,
     ImportError,
