@@ -1,6 +1,6 @@
 """Database configuration and session management."""
 
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -10,7 +10,7 @@ from src.core.config import get_settings
 settings = get_settings()
 
 # Create async engine with database-specific parameters
-engine_kwargs = {
+engine_kwargs: dict[str, Any] = {
     "echo": settings.database_echo,
     "pool_pre_ping": True,  # Enable connection health checks
 }

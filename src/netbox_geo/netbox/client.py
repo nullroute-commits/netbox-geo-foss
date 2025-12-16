@@ -162,7 +162,7 @@ class NetBoxClient:
         """
         try:
             endpoint_obj = getattr(self._client, endpoint)
-            return self._retry_with_backoff(endpoint_obj.create, data)
+            return self._retry_with_backoff(endpoint_obj.create, data)  # type: ignore[no-any-return]
         except AttributeError:
             raise NetBoxAPIError(f"Invalid endpoint: {endpoint}")
 
@@ -205,7 +205,7 @@ class NetBoxClient:
         try:
             endpoint_obj = getattr(self._client, endpoint)
             obj = self._retry_with_backoff(endpoint_obj.get, obj_id)
-            return self._retry_with_backoff(obj.delete)
+            return self._retry_with_backoff(obj.delete)  # type: ignore[no-any-return]
         except AttributeError:
             raise NetBoxAPIError(f"Invalid endpoint: {endpoint}")
 

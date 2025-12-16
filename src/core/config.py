@@ -70,7 +70,7 @@ class Settings(BaseSettings):
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
-    def parse_allowed_origins(cls, v: Any) -> list[str]:
+    def parse_allowed_origins(cls, v: Any) -> Any:
         """Parse allowed origins from comma-separated string."""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]

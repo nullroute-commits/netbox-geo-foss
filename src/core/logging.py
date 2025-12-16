@@ -17,6 +17,7 @@ def setup_logging() -> structlog.BoundLogger:
     log_level = getattr(logging, settings.log_level.upper())
 
     # Create formatter based on environment
+    formatter: logging.Formatter
     if settings.log_format == "json":
         formatter = jsonlogger.JsonFormatter(
             "%(timestamp)s %(level)s %(name)s %(message)s",
