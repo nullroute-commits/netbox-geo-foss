@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 env:
-  PYTHON_VERSION: "3.13.1"
+  PYTHON_VERSION: "3.12"
 
 jobs:
   create-release:
@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
 
@@ -25,32 +25,23 @@ jobs:
         id: changelog
         run: |
           # Simple changelog generation from git log
-          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-          git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            # First release - get all commits
+            git log --pretty=format:"- %s" > changelog.txt
+          else
+            # Get commits since previous tag
+            git log --pretty=format:"- %s" ${PREV_TAG}..HEAD > changelog.txt
+          fi
 
       - name: Create Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@7b4da11513bf3f43f9999e90eabced41ab8bb048 # v2
         with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          body: |
-            ## Changes in this Release
-            ${{ steps.changelog.outputs.CHANGELOG }}
-
-            ## Installation
-            ```bash
-            pip install netbox-geo-foss==${{ github.ref_name }}
-            ```
-
-            ## Docker
-            ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ```
+          name: Release ${{ github.ref_name }}
+          body_path: changelog.txt
           draft: false
           prerelease: false
+          generate_release_notes: true
 
   build-artifacts:
     name: Build Release Artifacts
@@ -58,10 +49,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -74,7 +65,7 @@ jobs:
         run: python -m build
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
         with:
           name: release-packages
           path: dist/

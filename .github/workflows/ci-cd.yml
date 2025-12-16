@@ -17,13 +17,13 @@ jobs:
   # Code Quality & Security Checks
   quality-checks:
     name: Code Quality & Security
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     container:
-      image: python:3.13-slim
+      image: python:3.12-slim
       options: --user root
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
 
@@ -47,7 +47,7 @@ jobs:
           pip-audit --desc --format json > pip-audit-report.json
 
       - name: Upload security reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
         with:
           name: security-reports
           path: |
@@ -58,7 +58,7 @@ jobs:
   # Unit Tests with Coverage
   unit-tests:
     name: Unit Tests
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         environment: [dev, test]
@@ -83,7 +83,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Run tests with Docker Compose
         run: |
@@ -96,7 +96,7 @@ jobs:
                         --junitxml=junit.xml
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
         if: always()
         with:
           name: test-results-${{ matrix.environment }}
@@ -109,10 +109,10 @@ jobs:
   integration-tests:
     name: Integration Tests
     needs: [quality-checks, unit-tests]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Start services
         run: |
@@ -143,17 +143,17 @@ jobs:
   build-images:
     name: Build Docker Images
     needs: [integration-tests]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3
 
       - name: Log in to Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3
         with:
           registry: ${{ secrets.REGISTRY_URL }}
           username: ${{ secrets.REGISTRY_USERNAME }}
@@ -161,7 +161,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96 # v5
         with:
           images: ${{ secrets.REGISTRY_URL }}/enterprise-app
           tags: |
@@ -172,7 +172,7 @@ jobs:
             type=sha
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
           push: true
@@ -185,7 +185,7 @@ jobs:
   security-scan:
     name: Container Security Scan
     needs: [build-images]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     steps:
       - name: Run Trivy vulnerability scanner
@@ -198,7 +198,7 @@ jobs:
             ${{ secrets.REGISTRY_URL }}/enterprise-app:${{ github.sha }}
 
       - name: Upload Trivy results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
         with:
           name: trivy-results
           path: trivy-results.json
@@ -207,7 +207,7 @@ jobs:
   deploy:
     name: Deploy Application
     needs: [security-scan]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.event_name == 'push'
     strategy:
       matrix:
@@ -217,7 +217,7 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Set up Ansible
         run: |
@@ -256,16 +256,16 @@ jobs:
   build-lxc-template:
     name: Build LXC Template
     needs: [security-scan]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Set up Packer
-        uses: hashicorp/setup-packer@main
+        uses: hashicorp/setup-packer@76e3039aa951aa4e6efe7e6ee06bc9ceb072142d # main
         with:
           version: latest
 
@@ -280,7 +280,7 @@ jobs:
           packer build lxc-template.json
 
       - name: Upload template manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
         with:
           name: lxc-template-manifest
           path: packer/manifest.json
@@ -289,7 +289,7 @@ jobs:
   deploy-lxc:
     name: Deploy to LXC
     needs: [security-scan]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     permissions:
       contents: read
@@ -301,7 +301,7 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Deploy to LXC containers
         env:
@@ -345,7 +345,7 @@ jobs:
   deploy-vm:
     name: Deploy to QEMU VM
     needs: [security-scan]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     permissions:
       contents: read
@@ -357,7 +357,7 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Deploy to QEMU VMs
         env:
@@ -404,11 +404,11 @@ jobs:
   performance-tests:
     name: Performance Tests
     needs: [deploy]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: matrix.environment == 'staging'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Run performance tests
         run: |
@@ -418,7 +418,7 @@ jobs:
             --out json=k6-results.json
 
       - name: Upload performance results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
         with:
           name: performance-results
           path: k6-results.json
@@ -427,7 +427,7 @@ jobs:
   cleanup:
     name: Cleanup Resources
     needs: [deploy]
-    runs-on: [self-hosted, docker]
+    runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Clean up Docker resources
