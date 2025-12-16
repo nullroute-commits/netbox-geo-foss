@@ -26,7 +26,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
-          fetch-depth: 0  # Required for CodeQL diff analysis on PRs
+          fetch-depth: 0  # Fetch full Git history for diff analysis
+      
+      # Fetch base branch explicitly for PR diff analysis
+      - name: Fetch base branch for PR analysis
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@6825d5659bf007b85a0866e2d0f434aacf50de94 # v3
