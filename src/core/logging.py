@@ -71,4 +71,4 @@ def setup_logging() -> structlog.BoundLogger:
     )
 
     # Return configured logger
-    return structlog.get_logger()
+    return structlog.get_logger()  # type: ignore[no-any-return]

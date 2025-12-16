@@ -16,7 +16,7 @@ settings = get_settings()
 
 async def get_redis_client() -> redis.Redis:
     """Get Redis client."""
-    return redis.from_url(str(settings.redis_url))
+    return redis.from_url(str(settings.redis_url))  # type: ignore[no-any-return]
 
 
 @router.get("/health", response_model=dict[str, Any])
@@ -45,7 +45,7 @@ async def health_check(
 
     # Check Redis
     try:
-        ping_result = await redis_client.ping()
+        ping_result = await redis_client.ping()  # type: ignore[misc]
         if ping_result:
             health_status["checks"]["redis"] = "healthy"
     except Exception as e:

@@ -27,8 +27,8 @@ if "postgres" in str(settings.database_url).lower():
 engine = create_async_engine(str(settings.database_url), **engine_kwargs)
 
 # Create async session factory
-AsyncSessionLocal = sessionmaker(
-    engine,
+AsyncSessionLocal = sessionmaker(  # type: ignore
+    bind=engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )
