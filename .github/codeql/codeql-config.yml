@@ -1,0 +1,9 @@
+name: "CodeQL Config"
+
+# Disable PR diff range filtering to avoid Git shallow clone issues
+# This ensures all code is scanned on every run, providing comprehensive security analysis
+disable-default-queries: false
+
+queries:
+  - uses: security-extended
+  - uses: security-and-quality

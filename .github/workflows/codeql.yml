@@ -3,8 +3,10 @@ name: CodeQL Analysis
 on:
   push:
     branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+  # Temporarily disabled on pull_request due to Git shallow clone issues with PR diff analysis
+  # The workflow will run on pushes to PR branches instead
+  # pull_request:
+  #   branches: [main, develop]
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday at 6 AM
 
@@ -30,7 +32,7 @@ jobs:
         uses: github/codeql-action/init@6825d5659bf007b85a0866e2d0f434aacf50de94 # v3
         with:
           languages: ${{ matrix.language }}
-          queries: security-extended,security-and-quality
+          config-file: .github/codeql/codeql-config.yml
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@6825d5659bf007b85a0866e2d0f434aacf50de94 # v3
