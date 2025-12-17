@@ -2,8 +2,8 @@
 pynetbox==7.5.0
 
 # HTTP & API Client
-requests==2.32.3
-urllib3==2.2.3
+requests==2.32.4
+urllib3==2.6.0
 fastapi==0.115.6
 uvicorn==0.34.0
 prometheus-client==0.21.1
@@ -51,5 +51,5 @@ tzdata==2024.2
 
 # Async Support
 asyncio==3.4.3
-aiohttp==3.11.10
+aiohttp==3.12.14
 redis==7.1.0
