@@ -85,6 +85,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
+"src/utils/health.py" = ["B008"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["netbox_geo"]
@@ -109,6 +110,7 @@ warn_no_return = true
 minversion = "8.0"
 addopts = "-ra -q --strict-markers --cov=netbox_geo --cov-report=html --cov-report=term-missing"
 testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["src/netbox_geo"]

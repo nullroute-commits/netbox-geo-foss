@@ -1,7 +1,5 @@
 """Unit tests for src.api.main module."""
 
-import pytest
-
 
 class TestRootEndpoint:
     """Tests for the root / endpoint."""

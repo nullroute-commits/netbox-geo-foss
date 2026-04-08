@@ -1,8 +1,7 @@
 """Pytest configuration and fixtures."""
 
-import asyncio
 import os
-from typing import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator
 
 import pytest
 import pytest_asyncio
@@ -10,7 +9,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
 from src.api.main import app
 from src.core.config import Settings, get_settings
 from src.core.database import Base, get_db
@@ -27,15 +25,6 @@ def test_settings() -> Settings:
         secret_key="test-secret-key",
         debug=True,
     )
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    yield loop
-    loop.close()
 
 
 @pytest_asyncio.fixture(scope="session")

@@ -1,7 +1,8 @@
 """FastAPI application entry point."""
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware

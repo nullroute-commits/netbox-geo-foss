@@ -102,6 +102,7 @@ class TestRateLimitDecorator:
 
     def test_decorator_allows_calls(self) -> None:
         """Test that decorated function can be called."""
+
         @rate_limit(calls_per_minute=1000)
         def my_func(x: int) -> int:
             return x * 2
@@ -110,6 +111,7 @@ class TestRateLimitDecorator:
 
     def test_decorator_preserves_return_value(self) -> None:
         """Test that decorator preserves the function's return value."""
+
         @rate_limit(calls_per_minute=1000)
         def greet(name: str) -> str:
             return f"Hello, {name}"
@@ -118,6 +120,7 @@ class TestRateLimitDecorator:
 
     def test_decorator_passes_kwargs(self) -> None:
         """Test that decorator passes keyword arguments."""
+
         @rate_limit(calls_per_minute=1000)
         def add(a: int, b: int = 0) -> int:
             return a + b

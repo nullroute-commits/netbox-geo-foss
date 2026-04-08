@@ -43,7 +43,7 @@ class TestNetBoxClientInit:
     def test_init_creates_client(self, netbox_config, mock_pynetbox_api) -> None:
         """Test that __init__ creates a pynetbox client."""
         mock_api, _ = mock_pynetbox_api
-        client = NetBoxClient(config=netbox_config)
+        NetBoxClient(config=netbox_config)
         mock_api.assert_called_once_with(
             url=netbox_config.url,
             token=netbox_config.token,
@@ -71,7 +71,7 @@ class TestNetBoxClientInit:
             token="test-token",
             verify_ssl=False,
         )
-        client = NetBoxClient(config=config)
+        NetBoxClient(config=config)
         _, mock_instance = mock_pynetbox_api
         # When SSL is disabled, http_session.verify should be set to False
         assert mock_instance.http_session.verify is False
@@ -82,12 +82,14 @@ class TestNetBoxClientInit:
             url="https://netbox.example.com",
             token="test-token",
         )
-        with patch(
-            "netbox_geo.netbox.client.pynetbox.api",
-            side_effect=Exception("Connection failed"),
+        with (
+            patch(
+                "netbox_geo.netbox.client.pynetbox.api",
+                side_effect=Exception("Connection failed"),
+            ),
+            pytest.raises(NetBoxAPIError, match="Failed to create NetBox client"),
         ):
-            with pytest.raises(NetBoxAPIError, match="Failed to create NetBox client"):
-                NetBoxClient(config=config)
+            NetBoxClient(config=config)
 
 
 class TestNetBoxClientProperty:
@@ -107,9 +109,10 @@ class TestNetBoxClientGet:
         _, mock_instance = mock_pynetbox_api
         mock_endpoint = MagicMock()
         mock_endpoint.all.return_value = [{"id": 1, "name": "test"}]
-        setattr(mock_instance, "dcim", mock_endpoint)
+        mock_instance.dcim = mock_endpoint
 
         result = client.get("dcim")
+        assert result is not None
         mock_endpoint.all.assert_called()
 
     def test_get_invalid_endpoint_raises(self, client, mock_pynetbox_api) -> None:
@@ -131,10 +134,11 @@ class TestNetBoxClientCreate:
         _, mock_instance = mock_pynetbox_api
         mock_endpoint = MagicMock()
         mock_endpoint.create.return_value = {"id": 1, "name": "new-site"}
-        setattr(mock_instance, "dcim", mock_endpoint)
+        mock_instance.dcim = mock_endpoint
 
         data = {"name": "new-site"}
         result = client.create("dcim", data)
+        assert result is not None
         mock_endpoint.create.assert_called()
 
     def test_create_invalid_endpoint_raises(self, client, mock_pynetbox_api) -> None:
@@ -154,10 +158,11 @@ class TestNetBoxClientBulkCreate:
         _, mock_instance = mock_pynetbox_api
         mock_endpoint = MagicMock()
         mock_endpoint.create.return_value = [{"id": 1}, {"id": 2}]
-        setattr(mock_instance, "dcim", mock_endpoint)
+        mock_instance.dcim = mock_endpoint
 
         data = [{"name": "site1"}, {"name": "site2"}]
         result = client.bulk_create("dcim", data)
+        assert result is not None
         mock_endpoint.create.assert_called()
 
     def test_bulk_create_invalid_endpoint_raises(self, client, mock_pynetbox_api) -> None:
@@ -179,9 +184,10 @@ class TestNetBoxClientUpdate:
         mock_obj = MagicMock()
         mock_obj.save.return_value = True
         mock_endpoint.get.return_value = mock_obj
-        setattr(mock_instance, "dcim", mock_endpoint)
+        mock_instance.dcim = mock_endpoint
 
         result = client.update("dcim", 1, {"name": "updated"})
+        assert result is not None
         mock_endpoint.get.assert_called()
         assert mock_obj.name == "updated"
 
@@ -204,9 +210,10 @@ class TestNetBoxClientDelete:
         mock_obj = MagicMock()
         mock_obj.delete.return_value = True
         mock_endpoint.get.return_value = mock_obj
-        setattr(mock_instance, "dcim", mock_endpoint)
+        mock_instance.dcim = mock_endpoint
 
         result = client.delete("dcim", 1)
+        assert result is not None
         mock_endpoint.get.assert_called()
         mock_obj.delete.assert_called()
 
@@ -244,9 +251,11 @@ class TestRetryWithBackoff:
         from requests.exceptions import RequestException
 
         func = MagicMock(side_effect=RequestException("always fails"))
-        with patch("netbox_geo.netbox.client.time.sleep"):
-            with pytest.raises(NetBoxAPIError, match="Failed after"):
-                client._retry_with_backoff(func, max_retries=1)
+        with (
+            patch("netbox_geo.netbox.client.time.sleep"),
+            pytest.raises(NetBoxAPIError, match="Failed after"),
+        ):
+            client._retry_with_backoff(func, max_retries=1)
         assert func.call_count == 2  # initial + 1 retry
 
     def test_unexpected_exception_raises_immediately(self, client) -> None:
@@ -261,9 +270,8 @@ class TestRetryWithBackoff:
         from requests.exceptions import RequestException
 
         func = MagicMock(side_effect=RequestException("fail"))
-        with patch("netbox_geo.netbox.client.time.sleep"):
-            with pytest.raises(NetBoxAPIError):
-                client._retry_with_backoff(func, max_retries=0)
+        with patch("netbox_geo.netbox.client.time.sleep"), pytest.raises(NetBoxAPIError):
+            client._retry_with_backoff(func, max_retries=0)
         func.assert_called_once()  # no retries, only initial call
 
     def test_retry_with_pynetbox_request_error(self, client) -> None:

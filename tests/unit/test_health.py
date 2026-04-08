@@ -1,9 +1,5 @@
 """Unit tests for src.utils.health module."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-
 
 class TestReadinessCheck:
     """Tests for the readiness endpoint."""

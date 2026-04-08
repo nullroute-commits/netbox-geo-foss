@@ -50,7 +50,7 @@ class NetBoxClient:
             return api
         except Exception as e:
             logger.error(f"Failed to create NetBox client: {e}")
-            raise NetBoxAPIError(f"Failed to create NetBox client: {e}")
+            raise NetBoxAPIError(f"Failed to create NetBox client: {e}") from e
 
     def _retry_with_backoff(
         self, func: Any, *args: Any, max_retries: int | None = None, **kwargs: Any
@@ -103,7 +103,7 @@ class NetBoxClient:
 
             except Exception as e:
                 logger.error(f"Unexpected error during API call: {e}")
-                raise NetBoxAPIError(f"Unexpected error: {e}")
+                raise NetBoxAPIError(f"Unexpected error: {e}") from e
 
         # All retries exhausted
         error_msg = f"Failed after {retries} retries: {last_exception}"
@@ -125,8 +125,8 @@ class NetBoxClient:
         try:
             endpoint_obj = getattr(self._client, endpoint)
             return self._retry_with_backoff(endpoint_obj.all, **params)
-        except AttributeError:
-            raise NetBoxAPIError(f"Invalid endpoint: {endpoint}")
+        except AttributeError as e:
+            raise NetBoxAPIError(f"Invalid endpoint: {endpoint}") from e
 
     def create(self, endpoint: str, data: dict[str, Any]) -> Any:
         """Create a new object in NetBox.
@@ -144,8 +144,8 @@ class NetBoxClient:
         try:
             endpoint_obj = getattr(self._client, endpoint)
             return self._retry_with_backoff(endpoint_obj.create, data)
-        except AttributeError:
-            raise NetBoxAPIError(f"Invalid endpoint: {endpoint}")
+        except AttributeError as e:
+            raise NetBoxAPIError(f"Invalid endpoint: {endpoint}") from e
 
     def bulk_create(self, endpoint: str, data: list[dict[str, Any]]) -> list[Any]:
         """Bulk create objects in NetBox.
@@ -164,8 +164,8 @@ class NetBoxClient:
             endpoint_obj = getattr(self._client, endpoint)
             result = self._retry_with_backoff(endpoint_obj.create, data)
             return result  # type: ignore[no-any-return]
-        except AttributeError:
-            raise NetBoxAPIError(f"Invalid endpoint: {endpoint}")
+        except AttributeError as e:
+            raise NetBoxAPIError(f"Invalid endpoint: {endpoint}") from e
 
     def update(self, endpoint: str, obj_id: int, data: dict[str, Any]) -> Any:
         """Update an existing object in NetBox.
@@ -187,8 +187,8 @@ class NetBoxClient:
             for key, value in data.items():
                 setattr(obj, key, value)
             return self._retry_with_backoff(obj.save)
-        except AttributeError:
-            raise NetBoxAPIError(f"Invalid endpoint: {endpoint}")
+        except AttributeError as e:
+            raise NetBoxAPIError(f"Invalid endpoint: {endpoint}") from e
 
     def delete(self, endpoint: str, obj_id: int) -> bool:
         """Delete an object from NetBox.
@@ -207,8 +207,8 @@ class NetBoxClient:
             endpoint_obj = getattr(self._client, endpoint)
             obj = self._retry_with_backoff(endpoint_obj.get, obj_id)
             return self._retry_with_backoff(obj.delete)  # type: ignore[no-any-return]
-        except AttributeError:
-            raise NetBoxAPIError(f"Invalid endpoint: {endpoint}")
+        except AttributeError as e:
+            raise NetBoxAPIError(f"Invalid endpoint: {endpoint}") from e
 
     @property
     def client(self) -> pynetbox.api:

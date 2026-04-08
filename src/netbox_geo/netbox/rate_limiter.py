@@ -1,8 +1,9 @@
 """Rate limiting implementation using token bucket algorithm."""
 
 import time
+from collections.abc import Callable
 from threading import Lock
-from typing import Any, Callable
+from typing import Any
 
 from netbox_geo.core.exceptions import RateLimitError
 
