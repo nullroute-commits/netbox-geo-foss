@@ -125,12 +125,6 @@ celerybeat.pid
 # Environments
 .env
 .env.local
-.env.app
-.env.db
-.env.cache
-.env.queue
-.env.security
-.env.logging
 .venv
 env/
 venv/

@@ -24,11 +24,11 @@ VERSION="${BUILD_VERSION:-$(git rev-parse --short HEAD)}"
 # Validate target
 case "$TARGET" in
     "staging"|"test")
-        COMPOSE_FILE="docker-compose.testing.yml"
+        COMPOSE_FILE="docker-compose.test.yml"
         ENV_FILE="environments/.env.testing.example"
         ;;
     "production"|"prod")
-        COMPOSE_FILE="docker-compose.production.yml"
+        COMPOSE_FILE="docker-compose.prod.yml"
         ENV_FILE="environments/.env.production.example"
         ;;
     *)

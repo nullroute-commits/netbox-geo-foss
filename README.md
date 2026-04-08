@@ -220,7 +220,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📚 Documentation
 
-- [Architecture Overview](ARCHITECTURE.md)
+- [Architecture Overview](docs/analysis/ARCHITECTURE.md)
 - [Contributing Guide](CONTRIBUTING.md)
 - [API Documentation](https://netbox-geo-foss.readthedocs.io)
 
