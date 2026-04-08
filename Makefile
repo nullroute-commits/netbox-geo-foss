@@ -1,12 +1,8 @@
 # NetBox Geographic Data Integration Makefile
-.PHONY: help setup test lint format security docker-build clean
+.PHONY: help build test lint lint-fix format format-check ruff security docker-build clean dev
 
 # Variables
-PYTHON := python3.13
-VENV := .venv
-BIN := $(VENV)/bin
-PYTHON_BIN := $(BIN)/python
-PIP := $(BIN)/pip
+COMPOSE := docker compose -f docker-compose.test.yml
 
 # Help target
 help:
@@ -14,72 +10,77 @@ help:
 	@echo ""
 	@echo "Usage: make [target]"
 	@echo ""
+	@echo "All targets run inside Docker containers."
+	@echo ""
 	@echo "Targets:"
 	@echo "  help          Show this help message"
-	@echo "  setup         Create venv and install dependencies"
-	@echo "  test          Run test suite"
-	@echo "  lint          Run all linters"
-	@echo "  format        Auto-format code"
-	@echo "  security      Run security scans"
-	@echo "  docker-build  Build Docker image"
-	@echo "  clean         Clean build artifacts"
-	@echo "  run           Run CLI help"
+	@echo "  build         Build the dev/test Docker image"
+	@echo "  test          Run test suite in Docker"
+	@echo "  lint          Run ruff linter in Docker"
+	@echo "  lint-fix      Auto-fix ruff lint issues in Docker"
+	@echo "  format        Auto-format code with ruff in Docker"
+	@echo "  format-check  Check code formatting with ruff in Docker"
+	@echo "  ruff          Run full ruff check + format check in Docker"
+	@echo "  security      Run security scans in Docker"
+	@echo "  docker-build  Build production Docker image"
+	@echo "  clean         Clean build artifacts and Docker resources"
 	@echo "  dev           Start development environment"
 
-# Setup development environment
-setup:
-	@echo "Setting up development environment..."
-	$(PYTHON) -m venv $(VENV)
-	$(PIP) install --upgrade pip setuptools wheel
-	$(PIP) install -r requirements/dev.txt
-	$(PIP) install -e .
-	@echo "Development environment ready!"
-	@echo "Activate with: source $(VENV)/bin/activate"
+# Build the dev/test image
+build:
+	@echo "Building dev/test Docker image..."
+	$(COMPOSE) build dev
 
-# Run tests
-test:
-	@echo "Running tests..."
-	$(BIN)/pytest --cov=netbox_geo --cov-report=html --cov-report=term-missing
+# Run tests in Docker
+test: build
+	@echo "Running tests in Docker..."
+	$(COMPOSE) run --rm test
 
-# Run all linters
-lint:
-	@echo "Running linters..."
-	$(BIN)/black --check src tests
-	$(BIN)/flake8 src tests
-	$(BIN)/isort --check-only src tests
-	$(BIN)/mypy src
+# Run ruff linter in Docker
+lint: build
+	@echo "Running ruff linter in Docker..."
+	$(COMPOSE) run --rm lint
 
-# Auto-format code
-format:
-	@echo "Formatting code..."
-	$(BIN)/black src tests
-	$(BIN)/isort src tests
+# Auto-fix ruff lint issues in Docker
+lint-fix: build
+	@echo "Auto-fixing ruff lint issues in Docker..."
+	$(COMPOSE) run --rm dev ruff check --fix src tests
 
-# Run security scans
-security:
-	@echo "Running security scans..."
-	$(BIN)/bandit -r src -f json -o bandit-report.json || true
-	$(BIN)/safety check || true
+# Check code formatting with ruff in Docker
+format-check: build
+	@echo "Checking code formatting in Docker..."
+	$(COMPOSE) run --rm format-check
 
-# Build Docker image
+# Auto-format code with ruff in Docker
+format: build
+	@echo "Formatting code in Docker..."
+	$(COMPOSE) run --rm format
+
+# Run full ruff check (lint + format check) in Docker
+ruff: build
+	@echo "Running full ruff check in Docker..."
+	$(COMPOSE) run --rm lint
+	$(COMPOSE) run --rm format-check
+
+# Run security scans in Docker
+security: build
+	@echo "Running security scans in Docker..."
+	$(COMPOSE) run --rm dev sh -c "bandit -r src -f json -o bandit-report.json || true && safety check || true"
+
+# Build production Docker image
 docker-build:
-	@echo "Building Docker image..."
+	@echo "Building production Docker image..."
 	docker build -t netbox-geo:latest .
 
-# Clean build artifacts
+# Clean build artifacts and Docker resources
 clean:
 	@echo "Cleaning up..."
-	rm -rf $(VENV)
+	$(COMPOSE) down -v --rmi local 2>/dev/null || true
 	rm -rf build dist *.egg-info
-	rm -rf .pytest_cache .mypy_cache .coverage htmlcov
-	rm -rf bandit-report.json safety-report.json
+	rm -rf .pytest_cache .mypy_cache .coverage htmlcov .ruff_cache
+	rm -rf bandit-report.json safety-report.json coverage.xml
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete
-
-# Run CLI
-run:
-	@echo "Running netbox-geo CLI..."
-	$(BIN)/netbox-geo --help
 
 # Start development environment
 dev:
