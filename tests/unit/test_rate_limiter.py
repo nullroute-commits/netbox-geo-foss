@@ -68,6 +68,14 @@ def test_rate_limiter_rejects_invalid_token_requests() -> None:
         limiter.acquire(tokens=0)
 
 
+def test_rate_limiter_rejects_requests_larger_than_bucket() -> None:
+    """Verify that RateLimiter rejects requests larger than the bucket capacity."""
+    limiter = RateLimiter(calls_per_minute=60)
+
+    with pytest.raises(ValueError, match="bucket capacity"):
+        limiter.acquire(tokens=61)
+
+
 def test_rate_limit_decorator_preserves_metadata() -> None:
     """The rate_limit decorator should preserve wrapped function metadata."""
 

@@ -52,6 +52,8 @@ class RateLimiter:
         """
         if tokens < 1:
             raise ValueError("tokens must be at least 1")
+        if tokens > self.max_tokens:
+            raise ValueError("tokens cannot exceed the configured bucket capacity")
 
         while True:
             with self._lock:

@@ -40,7 +40,7 @@ def test_app_settings_loads_nested_configuration(monkeypatch: pytest.MonkeyPatch
     assert settings.performance.rate_limit_calls_per_minute == 100
 
 
-def test_app_settings_require_required_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_app_settings_validate_required_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """AppSettings.load should fail when required nested settings are missing."""
     monkeypatch.delenv("NETBOX_URL", raising=False)
     monkeypatch.delenv("NETBOX_TOKEN", raising=False)
