@@ -1,113 +1,81 @@
-"""Unit tests for configuration module."""
+"""Unit tests for the active netbox_geo configuration module."""
 
 import pytest
 from pydantic import ValidationError
 
-from src.core.config import Settings
+import netbox_geo.core.config as config_module
+from netbox_geo.core.config import AppSettings, NetBoxConfig, get_settings
 
 
-class TestSettings:
-    """Test Settings configuration."""
+def test_netbox_config_normalizes_url() -> None:
+    """Verify that NetBoxConfig strips a trailing slash from the URL."""
+    config = NetBoxConfig(url="https://netbox.example.com/", token="test-token")
 
-    def test_default_settings(self):
-        """Test default settings values."""
-        settings = Settings(
-            secret_key="test-key",
-            database_url="postgresql://user:pass@localhost/db",
-            redis_url="redis://localhost:6379/0",
-        )
+    assert config.url == "https://netbox.example.com"
+    assert config.verify_ssl is True
+    assert config.timeout == 30
 
-        assert settings.app_name == "Enterprise App"
-        assert settings.environment == "development"
-        assert settings.debug is False
-        assert settings.api_port == 8000
 
-    def test_environment_validation(self):
-        """Test environment validation."""
-        # Valid environments
-        for env in ["development", "testing", "staging", "production"]:
-            settings = Settings(
-                environment=env,
-                secret_key="test-key",
-                database_url="postgresql://user:pass@localhost/db",
-                redis_url="redis://localhost:6379/0",
-            )
-            assert settings.environment == env
+def test_netbox_config_requires_http_scheme() -> None:
+    """Verify that NetBoxConfig rejects URLs without an HTTP scheme."""
+    with pytest.raises(ValidationError, match="NetBox URL must start with http:// or https://"):
+        NetBoxConfig(url="netbox.example.com", token="test-token")
 
-        # Invalid environment
-        with pytest.raises(ValidationError) as exc_info:
-            Settings(
-                environment="invalid",
-                secret_key="test-key",
-                database_url="postgresql://user:pass@localhost/db",
-                redis_url="redis://localhost:6379/0",
-            )
-        assert "Environment must be one of" in str(exc_info.value)
 
-    def test_allowed_origins_parsing(self):
-        """Test allowed origins parsing from string."""
-        # String input
-        settings = Settings(
-            secret_key="test-key",
-            database_url="postgresql://user:pass@localhost/db",
-            redis_url="redis://localhost:6379/0",
-            allowed_origins="http://localhost:3000,http://localhost:8080",
-        )
-        assert settings.allowed_origins == ["http://localhost:3000", "http://localhost:8080"]
+def test_app_settings_loads_nested_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AppSettings.load should build nested settings objects from environment variables."""
+    monkeypatch.setenv("NETBOX_URL", "https://netbox.example.com/api/")
+    monkeypatch.setenv("NETBOX_TOKEN", "super-secret")
+    monkeypatch.setenv("GEONAMES_USERNAME", "geotest")
+    monkeypatch.setenv("DATA_BATCH_SIZE", "250")
 
-        # List input
-        settings = Settings(
-            secret_key="test-key",
-            database_url="postgresql://user:pass@localhost/db",
-            redis_url="redis://localhost:6379/0",
-            allowed_origins=["http://example.com"],
-        )
-        assert settings.allowed_origins == ["http://example.com"]
+    settings = AppSettings.load()
 
-    def test_environment_properties(self):
-        """Test environment property methods."""
-        # Production
-        settings = Settings(
-            environment="production",
-            secret_key="test-key",
-            database_url="postgresql://user:pass@localhost/db",
-            redis_url="redis://localhost:6379/0",
-        )
-        assert settings.is_production is True
-        assert settings.is_development is False
-        assert settings.is_testing is False
+    assert settings.app_name == "netbox-geo-foss"
+    assert settings.app_env == "development"
+    assert settings.netbox.url == "https://netbox.example.com/api"
+    assert settings.netbox.token == "super-secret"
+    assert settings.data_sources.geonames_username == "geotest"
+    assert settings.data_management.batch_size == 250
+    assert settings.performance.rate_limit_calls_per_minute == 100
 
-        # Development
-        settings.environment = "development"
-        assert settings.is_production is False
-        assert settings.is_development is True
-        assert settings.is_testing is False
 
-        # Testing
-        settings.environment = "testing"
-        assert settings.is_production is False
-        assert settings.is_development is False
-        assert settings.is_testing is True
+def test_app_settings_require_required_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AppSettings.load should fail when required nested settings are missing."""
+    monkeypatch.delenv("NETBOX_URL", raising=False)
+    monkeypatch.delenv("NETBOX_TOKEN", raising=False)
 
-    def test_required_fields(self, monkeypatch):
-        """Test required fields validation."""
-        # Clear environment variables that might interfere
-        monkeypatch.delenv("SECRET_KEY", raising=False)
-        monkeypatch.delenv("DATABASE_URL", raising=False)
-        monkeypatch.delenv("REDIS_URL", raising=False)
+    with pytest.raises(ValidationError) as exc_info:
+        AppSettings.load()
 
-        # Missing secret_key
-        with pytest.raises(ValidationError) as exc_info:
-            Settings(
-                database_url="postgresql://user:pass@localhost/db",
-                redis_url="redis://localhost:6379/0",
-            )
-        assert "secret_key" in str(exc_info.value)
+    error_text = str(exc_info.value)
+    assert "url" in error_text
+    assert "token" in error_text
 
-        # Missing database_url
-        with pytest.raises(ValidationError) as exc_info:
-            Settings(
-                secret_key="test-key",
-                redis_url="redis://localhost:6379/0",
-            )
-        assert "database_url" in str(exc_info.value)
+
+def test_data_source_config_requires_geonames_username(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that DataSourceConfig enforces its required GeoNames username."""
+    monkeypatch.setenv("NETBOX_URL", "https://netbox.example.com")
+    monkeypatch.setenv("NETBOX_TOKEN", "super-secret")
+    monkeypatch.delenv("GEONAMES_USERNAME", raising=False)
+
+    with pytest.raises(ValidationError) as exc_info:
+        AppSettings.load()
+
+    assert "geonames_username" in str(exc_info.value)
+
+
+def test_get_settings_returns_cached_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """get_settings should reuse the module-level settings instance once loaded."""
+    monkeypatch.setenv("NETBOX_URL", "https://netbox.example.com")
+    monkeypatch.setenv("NETBOX_TOKEN", "super-secret")
+    monkeypatch.setenv("GEONAMES_USERNAME", "geotest")
+    config_module.settings = None
+
+    first = get_settings()
+    second = get_settings()
+
+    assert first is second
+    assert second.netbox.url == "https://netbox.example.com"
+
+    config_module.settings = None
