@@ -10,7 +10,7 @@ upstream_agents:
 
 # NetBox Geo FOSS Agent Skill and Source of Truth
 
-This file is the project-scoped source of truth for using the upstream
+This file is the project-scoped source of truth for using the requested upstream
 [agency-agents](https://github.com/nullroute-commits/agency-agents) collection
 with this repository.
 
@@ -57,8 +57,9 @@ Use **Sprint Prioritizer** for roadmap and sprint planning.
   `src/netbox_geo/`.
 - Developer automation lives in `Makefile`.
 - Container/runtime packaging lives in `Dockerfile` and the compose files.
-- Tests must be treated carefully because the current suite mixes multiple
-  application layouts.
+- Tests must be treated carefully because `tests/conftest.py` and
+  `tests/unit/test_config.py` still reference legacy `src.api` and `src.core`
+  modules alongside the active `src/netbox_geo/` package.
 
 ## Validation defaults
 
