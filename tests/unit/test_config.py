@@ -70,12 +70,10 @@ def test_get_settings_returns_cached_settings(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("NETBOX_URL", "https://netbox.example.com")
     monkeypatch.setenv("NETBOX_TOKEN", "super-secret")
     monkeypatch.setenv("GEONAMES_USERNAME", "geotest")
-    config_module.settings = None
+    monkeypatch.setattr(config_module, "settings", None)
 
     first = get_settings()
     second = get_settings()
 
     assert first is second
     assert second.netbox.url == "https://netbox.example.com"
-
-    config_module.settings = None
