@@ -53,7 +53,7 @@ Use **Sprint Prioritizer** for roadmap and sprint planning.
 
 ## Repository-specific facts to use as planning defaults
 
-- Package metadata and CLI entrypoints live in `pyproject.toml` and
+- Package metadata and CLI entry points live in `pyproject.toml` and
   `src/netbox_geo/`.
 - Developer automation lives in `Makefile`.
 - Container/runtime packaging lives in `Dockerfile` and the compose files.
