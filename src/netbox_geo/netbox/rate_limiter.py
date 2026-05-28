@@ -1,10 +1,14 @@
 """Rate limiting implementation using token bucket algorithm."""
 
 import time
+from functools import wraps
 from threading import Lock
-from typing import Any, Callable
+from typing import Any, Callable, ParamSpec, TypeVar
 
 from netbox_geo.core.exceptions import RateLimitError
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 class RateLimiter:
@@ -16,6 +20,9 @@ class RateLimiter:
         Args:
             calls_per_minute: Maximum number of API calls allowed per minute.
         """
+        if calls_per_minute < 1:
+            raise ValueError("calls_per_minute must be at least 1")
+
         self.calls_per_minute = calls_per_minute
         self.tokens = float(calls_per_minute)
         self.max_tokens = float(calls_per_minute)
@@ -43,30 +50,28 @@ class RateLimiter:
         Raises:
             RateLimitError: If tokens cannot be acquired in non-blocking mode.
         """
-        with self._lock:
-            self._refill()
+        if tokens < 1:
+            raise ValueError("tokens must be at least 1")
+        if tokens > self.max_tokens:
+            raise ValueError("tokens cannot exceed the configured bucket capacity")
 
-            if self.tokens >= tokens:
-                self.tokens -= tokens
-                return True
+        while True:
+            with self._lock:
+                self._refill()
 
-            if not blocking:
+                if self.tokens >= tokens:
+                    self.tokens -= tokens
+                    return True
+
                 retry_after = (tokens - self.tokens) / self.refill_rate
-                raise RateLimitError(
-                    f"Rate limit exceeded. Retry after {retry_after:.2f} seconds.",
-                    retry_after=retry_after,
-                )
+                if not blocking:
+                    raise RateLimitError(
+                        f"Rate limit exceeded. Retry after {retry_after:.2f} seconds.",
+                        retry_after=retry_after,
+                    )
 
-            # Calculate wait time
-            wait_time = (tokens - self.tokens) / self.refill_rate
-
-        # Wait outside the lock
-        time.sleep(wait_time)
-
-        with self._lock:
-            self._refill()
-            self.tokens -= tokens
-            return True
+            # Wait outside the lock, then re-check token availability.
+            time.sleep(retry_after)
 
     def __enter__(self) -> "RateLimiter":
         """Context manager entry."""
@@ -78,7 +83,7 @@ class RateLimiter:
         pass
 
 
-def rate_limit(calls_per_minute: int = 100) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def rate_limit(calls_per_minute: int = 100) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Rate limit function calls with a decorator.
 
     Note: Creates a separate RateLimiter instance per decorated function.
@@ -92,8 +97,9 @@ def rate_limit(calls_per_minute: int = 100) -> Callable[[Callable[..., Any]], Ca
     """
     limiter = RateLimiter(calls_per_minute=calls_per_minute)
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
+        @wraps(func)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             limiter.acquire()
             return func(*args, **kwargs)
 
