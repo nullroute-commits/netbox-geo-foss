@@ -1,75 +1,44 @@
-# CI/CD Dockerfile
-# Multi-stage build for continuous integration
-# Last updated: 2025-08-30 22:40:55 UTC by nullroute-commits
+# CI/CD Dockerfile – extends the main 'ci' build stage
+# Adds extra tooling (bandit, safety) used only in the pipeline.
+ARG PYTHON_VERSION=3.12
+FROM python:${PYTHON_VERSION}-slim AS ci-base
 
-ARG PYTHON_VERSION=3.12.5
-ARG BUILDPLATFORM=linux/amd64
-ARG TARGETPLATFORM=linux/amd64
-
-FROM python:${PYTHON_VERSION}-slim as ci-base
-
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     CI=true
 
-# Set work directory
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# System deps (geo libraries + curl for healthchecks)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libpq-dev \
-    libbz2-dev \
-    libffi-dev \
-    libssl-dev \
-    libxml2-dev \
-    libxslt-dev \
-    zlib1g-dev \
-    libjpeg-dev \
-    libpng-dev \
     curl \
-    wget \
     git \
-    netcat-openbsd \
-    docker.io \
-    openssh-client \
-    rsync \
-    jq \
-    && apt-get clean \
+    libgeos-dev \
+    libproj-dev \
+    libgdal-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies for CI
-COPY requirements/development.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+WORKDIR /app
 
-# Install additional CI tools
-RUN pip install --no-cache-dir \
-    coverage==7.3.2 \
-    pytest-cov==4.1.0 \
-    pytest-xdist==3.5.0 \
-    bandit==1.7.5 \
-    safety==2.3.5
+# Install Python dependencies
+COPY requirements/base.txt requirements/base.txt
+COPY requirements/dev.txt requirements/dev.txt
+RUN python -m venv /app/.venv && \
+    /app/.venv/bin/pip install --upgrade pip setuptools wheel && \
+    /app/.venv/bin/pip install -r requirements/dev.txt
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy application source
+COPY pyproject.toml .
+COPY src src/
+COPY tests tests/
+RUN pip install -e . --no-deps
 
 # Copy CI scripts
 COPY ci/ /app/ci/
-RUN chmod +x /app/ci/*.sh
+RUN chmod +x /app/ci/*.sh /app/ci/scripts/*.sh 2>/dev/null || chmod +x /app/ci/*.sh
 
-# Copy application code
-COPY . /app/
-
-# Create CI user
-RUN groupadd -r ci && useradd -r -g ci ci
-
-# Create necessary directories
-RUN mkdir -p /app/logs /app/staticfiles /app/media /app/.cache && \
-    chown -R ci:ci /app
-
-USER ci
-
-# Default entrypoint
 ENTRYPOINT ["/app/ci/entrypoint.sh"]
 CMD ["--help"]

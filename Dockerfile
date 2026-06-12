@@ -1,15 +1,16 @@
+# syntax=docker/dockerfile:1
 # Multi-stage Dockerfile for NetBox Geographic Data Integration
-# Python 3.12
-FROM python:3.12-slim as builder
+# Stages: base → builder → ci → production
 
-# Set environment variables
+# ── base: system dependencies ──────────────────────────────────────────────────
+FROM python:3.12-slim AS base
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_DEFAULT_TIMEOUT=100
 
-# Install system dependencies for geographic libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -19,30 +20,37 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdal-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
 WORKDIR /app
 
-# Copy dependency files
-COPY requirements/base.txt requirements/base.txt
+# ── builder: production Python dependencies ────────────────────────────────────
+FROM base AS builder
 
-# Create virtual environment and install dependencies
+COPY requirements/base.txt requirements/base.txt
 RUN python -m venv /app/.venv && \
     /app/.venv/bin/pip install --upgrade pip setuptools wheel && \
     /app/.venv/bin/pip install -r requirements/base.txt
 
-# Stage 2: Runtime stage
-FROM python:3.12-slim as runtime
+# ── ci: dev dependencies + source (for lint/test in Docker) ───────────────────
+FROM builder AS ci
 
-# Create non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+COPY requirements/dev.txt requirements/dev.txt
+RUN /app/.venv/bin/pip install -r requirements/dev.txt
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH" \
-    PYTHONPATH="/app/src:$PYTHONPATH"
+COPY pyproject.toml .
+COPY src src/
+COPY tests tests/
+RUN /app/.venv/bin/pip install -e . --no-deps
 
-# Install runtime dependencies
+ENV PATH="/app/.venv/bin:$PATH" \
+    CI=true
+
+# Default: run the test suite
+CMD ["pytest", "--cov=netbox_geo", "--cov-report=term-missing", "-v"]
+
+# ── production: slim runtime image ────────────────────────────────────────────
+FROM python:3.12-slim AS production
+
+# Geo runtime libraries only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libgeos-c1v5 \
@@ -51,31 +59,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdal36 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory and cache directory
-WORKDIR /app
-RUN mkdir -p /app/cache && chown -R appuser:appuser /app
+# Non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# Copy Python dependencies from builder
+WORKDIR /app
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Copy only the pre-built venv from builder
 COPY --from=builder /app/.venv /app/.venv
 
-# Copy application code
-COPY --chown=appuser:appuser src /app/src
-COPY --chown=appuser:appuser pyproject.toml /app/
+# Create writable directories before dropping privileges
+RUN mkdir -p /app/cache /app/logs && chown -R appuser:appuser /app
 
-# Create necessary directories
-RUN mkdir -p /app/logs /app/tmp && \
-    chown -R appuser:appuser /app
+COPY --chown=appuser:appuser pyproject.toml .
+COPY --chown=appuser:appuser src src/
 
-# Install the package in editable mode
 USER appuser
-RUN /app/.venv/bin/pip install -e .
+RUN /app/.venv/bin/pip install -e . --no-deps --no-build-isolation
 
-# Health check (simple Python check)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import netbox_geo; print(netbox_geo.__version__)" || exit 1
 
-# Expose port (if running API server)
 EXPOSE 8000
-
-# Default command
 CMD ["netbox-geo", "--help"]
