@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "netbox-geo-foss"
 version = "1.0.0"
-description = "Enterprise FOSS Geographic Data Integration for NetBox 4.4.8+"
+description = "Enterprise FOSS Geographic Data Integration for NetBox 4.4+"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 license = {text = "MIT"}
@@ -27,24 +27,25 @@ classifiers = [
 ]
 
 dependencies = [
-    "pynetbox==7.5.0",
-    "requests==2.32.3",
-    "pandas==2.2.3",
-    "geopandas==1.0.1",
-    "pydantic==2.10.3",
-    "click==8.1.8",
-    "rich==13.9.4",
+    "pynetbox==7.7.0",
+    "requests==2.34.2",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.1",
+    "click==8.4.1",
+    "rich==15.0.0",
     "loguru==0.7.3",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest==8.3.4",
-    "pytest-cov==6.0.0",
-    "black==24.10.0",
-    "flake8==7.1.1",
-    "mypy==1.13.0",
-    "pre-commit==4.0.1",
+    "pytest==9.0.3",
+    "pytest-cov==7.1.0",
+    "pytest-mock==3.15.1",
+    "black==26.5.1",
+    "flake8==7.3.0",
+    "mypy==2.1.0",
+    "isort==8.0.1",
+    "pre-commit==4.6.0",
 ]
 
 [project.urls]
@@ -71,7 +72,7 @@ include = '\.pyi?$'
 [tool.isort]
 profile = "black"
 line_length = 100
-py_version = "312"
+py_version = "313"
 known_first_party = ["netbox_geo"]
 
 [tool.mypy]
@@ -87,7 +88,7 @@ warn_unused_ignores = true
 warn_no_return = true
 
 [tool.pytest.ini_options]
-minversion = "8.0"
+minversion = "9.0"
 addopts = "-ra -q --strict-markers --cov=netbox_geo --cov-report=html --cov-report=term-missing"
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
