@@ -1,436 +1,165 @@
-name: Enterprise CI/CD Pipeline
+# Docker multi-stage CI/CD pipeline
+# Stages: lint → test → build → push → deploy
+#
+# Every gate runs inside the 'ci' Docker image so local and CI environments
+# are identical.  The production image is built and pushed only on main/tags.
+name: Docker CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop, release/*]
+    branches: [main, develop, 'release/**']
   pull_request:
     branches: [main, develop]
-  release:
-    types: [created]
 
 env:
+  REGISTRY: ghcr.io
+  IMAGE: ${{ github.repository }}
   PYTHON_VERSION: "3.12"
-  DOCKER_BUILDKIT: 1
-  COMPOSE_DOCKER_CLI_BUILD: 1
 
 jobs:
-  # Code Quality & Security Checks
-  quality-checks:
-    name: Code Quality & Security
+
+  # ── Stage 1: code quality ───────────────────────────────────────────────────
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-    container:
-      image: python:3.12-slim
-      options: --user root
     steps:
-      - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3
+
+      - name: Build ci stage (cached)
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
-          fetch-depth: 0
+          context: .
+          target: ci
+          load: true
+          tags: netbox-geo:ci
+          cache-from: type=gha,scope=ci
+          cache-to: type=gha,scope=ci,mode=max
 
-      - name: Set up Python environment
+      - name: Run lint
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,security]"
+          docker compose -f docker-compose.ci.yml run --rm lint
 
-      - name: Run code formatting check
-        run: |
-          black --check src tests
-          ruff check src tests
-
-      - name: Run type checking
-        run: mypy src
-
-      - name: Run security scan
-        run: |
-          bandit -r src -f json -o bandit-report.json
-          safety check --json > safety-report.json
-          pip-audit --desc --format json > pip-audit-report.json
-
-      - name: Upload security reports
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
-        with:
-          name: security-reports
-          path: |
-            bandit-report.json
-            safety-report.json
-            pip-audit-report.json
-
-  # Unit Tests with Coverage
-  unit-tests:
-    name: Unit Tests
+  # ── Stage 2: tests ──────────────────────────────────────────────────────────
+  test:
+    name: Test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        environment: [dev, test]
-    services:
-      postgres:
-        image: postgres:17-alpine
+    needs: lint
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3
+
+      - name: Restore ci image from cache
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: .
+          target: ci
+          load: true
+          tags: netbox-geo:ci
+          cache-from: type=gha,scope=ci
+
+      - name: Run tests
         env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_db
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7.4-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - name: Run tests with Docker Compose
+          NETBOX_URL: https://demo.netbox.dev
+          NETBOX_TOKEN: ci-placeholder
+          GEONAMES_USERNAME: ci-test
         run: |
-          docker compose -f docker-compose.base.yml \
-                        -f docker-compose.${{ matrix.environment }}.yml \
-                        run --rm app pytest \
-                        --cov=src \
-                        --cov-report=xml \
-                        --cov-report=html \
-                        --junitxml=junit.xml
+          mkdir -p reports
+          docker compose -f docker-compose.ci.yml run --rm \
+            -v ${{ github.workspace }}/reports:/app/reports \
+            test
 
       - name: Upload test results
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
         if: always()
         with:
-          name: test-results-${{ matrix.environment }}
+          name: test-results
           path: |
-            junit.xml
-            htmlcov/
-            coverage.xml
+            reports/junit.xml
+            reports/coverage.xml
+            reports/htmlcov/
 
-  # Integration Tests
-  integration-tests:
-    name: Integration Tests
-    needs: [quality-checks, unit-tests]
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@0f8570b1a125f4937846a11fcfa3bcd548bd8c97 # v4
+        with:
+          file: reports/coverage.xml
+          fail_ci_if_error: false
+
+  # ── Stage 3: build production image ─────────────────────────────────────────
+  build:
+    name: Build
     runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_digest: ${{ steps.push.outputs.digest }}
+      image_tags: ${{ steps.meta.outputs.tags }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - name: Start services
-        run: |
-          docker compose -f docker-compose.base.yml \
-                        -f docker-compose.test.yml \
-                        up -d
-
-      - name: Wait for services
-        run: |
-          docker compose -f docker-compose.base.yml \
-                        -f docker-compose.test.yml \
-                        exec -T app curl --retry 10 --retry-connrefused http://localhost:8000/health
-
-      - name: Run integration tests
-        run: |
-          docker compose -f docker-compose.base.yml \
-                        -f docker-compose.test.yml \
-                        exec -T app pytest tests/integration -v
-
-      - name: Stop services
-        if: always()
-        run: |
-          docker compose -f docker-compose.base.yml \
-                        -f docker-compose.test.yml \
-                        down -v
-
-  # Build and Push Docker Images
-  build-images:
-    name: Build Docker Images
-    needs: [integration-tests]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3
 
-      - name: Log in to Container Registry
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3
         with:
-          registry: ${{ secrets.REGISTRY_URL }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96 # v5
         with:
-          images: ${{ secrets.REGISTRY_URL }}/enterprise-app
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha
+            type=sha,format=short
 
-      - name: Build and push Docker image
+      - name: Build and push production image
+        id: push
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
-          push: true
+          target: production
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+          cache-from: |
+            type=gha,scope=ci
+            type=gha,scope=production
+          cache-to: type=gha,scope=production,mode=max
 
-  # Security Scanning
-  security-scan:
-    name: Container Security Scan
-    needs: [build-images]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
-    steps:
-      - name: Run Trivy vulnerability scanner
-        run: |
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:latest image \
-            --format json \
-            --output trivy-results.json \
-            ${{ secrets.REGISTRY_URL }}/enterprise-app:${{ github.sha }}
-
-      - name: Upload Trivy results
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
-        with:
-          name: trivy-results
-          path: trivy-results.json
-
-  # Deploy to Environments
+  # ── Stage 4: deploy (main branch only) ───────────────────────────────────────
   deploy:
-    name: Deploy Application
-    needs: [security-scan]
+    name: Deploy
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
     strategy:
       matrix:
-        environment: ${{ github.ref == 'refs/heads/main' && fromJSON('["staging", "production"]') || fromJSON('["development"]') }}
-    environment:
-      name: ${{ matrix.environment }}
-      url: ${{ steps.deploy.outputs.url }}
+        environment: [staging, production]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - name: Set up Ansible
+      - name: Deploy to ${{ matrix.environment }}
         run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -v ~/.ssh:/root/.ssh:ro \
-            -e ANSIBLE_HOST_KEY_CHECKING=False \
-            python:3.13-slim bash -c "
-              pip install ansible==9.9.0 ansible-core==2.16.10
-              cd /workspace
-              ansible-playbook \
-                -i ansible/inventories/${{ matrix.environment }}/hosts.yml \
-                ansible/playbooks/deploy.yml \
-                -e 'app_version=${{ github.sha }}' \
-                -e 'environment=${{ matrix.environment }}'
-            "
-
-      - name: Health check
-        id: deploy
-        run: |
-          case "${{ matrix.environment }}" in
-            development)
-              URL="https://dev.example.com"
-              ;;
-            staging)
-              URL="https://staging.example.com"
-              ;;
-            production)
-              URL="https://example.com"
-              ;;
-          esac
-          echo "url=$URL" >> $GITHUB_OUTPUT
-          curl --retry 10 --retry-connrefused $URL/health
-
-  # Build LXC Template
-  build-lxc-template:
-    name: Build LXC Template
-    needs: [security-scan]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - name: Set up Packer
-        uses: hashicorp/setup-packer@76e3039aa951aa4e6efe7e6ee06bc9ceb072142d # main
-        with:
-          version: latest
-
-      - name: Build LXC template
-        env:
-          PROXMOX_URL: ${{ secrets.PROXMOX_URL }}
-          PROXMOX_NODE: ${{ secrets.PROXMOX_NODE }}
-          PROXMOX_USERNAME: ${{ secrets.PROXMOX_USERNAME }}
-          PROXMOX_TOKEN: ${{ secrets.PROXMOX_TOKEN }}
-        run: |
-          cd packer
-          packer build lxc-template.json
-
-      - name: Upload template manifest
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
-        with:
-          name: lxc-template-manifest
-          path: packer/manifest.json
-
-  # Deploy to LXC Containers
-  deploy-lxc:
-    name: Deploy to LXC
-    needs: [security-scan]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
-    permissions:
-      contents: read
-    strategy:
-      matrix:
-        environment: ${{ github.ref == 'refs/heads/main' && fromJSON('["staging"]') || fromJSON('["production"]') }}
-    environment:
-      name: ${{ matrix.environment }}-lxc
-      url: ${{ steps.deploy.outputs.url }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - name: Deploy to LXC containers
-        env:
-          PROXMOX_API_TOKEN: ${{ secrets.PROXMOX_API_TOKEN }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -v ~/.ssh:/root/.ssh:ro \
-            -e ANSIBLE_HOST_KEY_CHECKING=False \
-            python:3.13-slim bash -c "
-              pip install ansible==9.9.0 ansible-core==2.16.10 proxmoxer requests
-              cd /workspace
-              ansible-playbook \
-                -i ansible/inventories/${{ matrix.environment }}/lxc-hosts.yml \
-                ansible/playbooks/deploy-lxc.yml \
-                -e 'app_version=${{ github.sha }}' \
-                -e 'environment=${{ matrix.environment }}' \
-                -e 'proxmox_api_token_secret=$PROXMOX_API_TOKEN'
-            "
-
-      - name: Health check
-        id: deploy
-        run: |
-          case "${{ matrix.environment }}" in
-            staging)
-              URL="https://lxc-staging.example.com"
-              ;;
-            production)
-              URL="https://lxc.example.com"
-              ;;
-          esac
-          echo "url=$URL" >> $GITHUB_OUTPUT
-          curl --retry 10 --retry-connrefused $URL/health
-
-  # Deploy to QEMU VMs
-  deploy-vm:
-    name: Deploy to QEMU VM
-    needs: [security-scan]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
-    permissions:
-      contents: read
-    strategy:
-      matrix:
-        environment: ${{ github.ref == 'refs/heads/main' && fromJSON('["staging"]') || fromJSON('["production"]') }}
-    environment:
-      name: ${{ matrix.environment }}-vm
-      url: ${{ steps.deploy.outputs.url }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - name: Deploy to QEMU VMs
-        env:
-          PROXMOX_API_TOKEN: ${{ secrets.PROXMOX_API_TOKEN }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -v ~/.ssh:/root/.ssh:ro \
-            -e ANSIBLE_HOST_KEY_CHECKING=False \
-            python:3.13-slim bash -c "
-              pip install ansible==9.9.0 ansible-core==2.16.10 proxmoxer requests
-              cd /workspace
-              ansible-playbook \
-                -i ansible/inventories/${{ matrix.environment }}/vm-hosts.yml \
-                ansible/playbooks/deploy-vm.yml \
-                -e 'app_version=${{ github.sha }}' \
-                -e 'environment=${{ matrix.environment }}' \
-                -e 'docker_registry=$DOCKER_REGISTRY' \
-                -e 'proxmox_api_token_secret=$PROXMOX_API_TOKEN'
-            "
-
-      - name: Health check
-        id: deploy
-        run: |
-          case "${{ matrix.environment }}" in
-            staging)
-              URL="https://vm-staging.example.com"
-              ;;
-            production)
-              URL="https://vm.example.com"
-              ;;
-          esac
-          echo "url=$URL" >> $GITHUB_OUTPUT
-          curl --retry 10 --retry-connrefused $URL/health
-
-  # Performance Tests
-  performance-tests:
-    name: Performance Tests
-    needs: [deploy]
-    runs-on: ubuntu-latest
-    if: matrix.environment == 'staging'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - name: Run performance tests
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}/tests/performance:/scripts \
-            grafana/k6:latest run /scripts/load-test.js \
-            --out json=k6-results.json
-
-      - name: Upload performance results
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
-        with:
-          name: performance-results
-          path: k6-results.json
-
-  # Cleanup
-  cleanup:
-    name: Cleanup Resources
-    needs: [deploy]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Clean up Docker resources
-        run: |
-          docker system prune -af --volumes
-          docker compose -f docker-compose.ci.yml down -v
+          echo "Deploying ${{ needs.build.outputs.image_tags }} to ${{ matrix.environment }}"
+          # Hook: run ansible, kubectl, or docker compose on target host
+          # ansible-playbook -i ansible/inventories/${{ matrix.environment }}/hosts.yml \
+          #     ansible/playbooks/deploy.yml \
+          #     -e "image_tag=${{ needs.build.outputs.image_digest }}"
